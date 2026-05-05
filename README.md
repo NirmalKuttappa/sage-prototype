@@ -4,7 +4,7 @@ HCDE Capstone 2026 · UW Research × ORIS
 
 An interactive prototype layered on top of the [Figma wireframes](https://www.figma.com/design/6DGhaN3FEcfwAi3ucDi76N) so reviewers can click through the flow and feel the interactions, not just see the screens.
 
-> **Live demo:** [add Netlify URL after first deploy]
+> **Live demo:** https://hcdeorbit.netlify.app/
 > **Figma source of truth:** https://www.figma.com/design/6DGhaN3FEcfwAi3ucDi76N
 > **Live mockup (legacy):** https://sage-uw-312654455232.us-west1.run.app
 
