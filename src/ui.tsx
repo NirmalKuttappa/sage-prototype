@@ -235,6 +235,109 @@ export function IssuesPanel({
   )
 }
 
+// Right-panel mismatch resolution UI — replaces the top issues banner
+// with a contextual deep-dive (per Figma frame 134:239)
+export function MismatchPanel({
+  issue, currentTotal, target, onApplyFix, onAdjustManually, onClose,
+}: {
+  issue: Issue;
+  currentTotal: number;
+  target: number;
+  onApplyFix: () => void;
+  onAdjustManually: () => void;
+  onClose: () => void;
+}) {
+  const diff = target - currentTotal
+  const calculated = currentTotal
+  return (
+    <aside className="w-[340px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
+      <div className="bg-amber-700 text-white px-4 py-3 flex items-center justify-between text-[13px] font-semibold">
+        <span className="flex items-center gap-2"><span aria-hidden>⚠</span> Budget Mismatch</span>
+        <button onClick={onClose} className="text-[11px] px-2 py-1 border border-white/40 rounded hover:bg-white/10" title="Close">Close</button>
+      </div>
+
+      <div className="p-4 space-y-4 overflow-auto flex-1 text-[12px]">
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Selected · {issue.cellRef}</div>
+          <div className="text-[14px] font-semibold text-ink">{issue.location.split('·').pop()?.trim() || issue.location}</div>
+        </div>
+
+        {/* Numeric breakdown */}
+        <div className="bg-amber-50 border border-amber-bd rounded-lg p-3 space-y-2">
+          <div className="text-[12px] font-semibold text-amber-700">Rounding mismatch</div>
+          <div className="grid grid-cols-[1fr_auto] gap-y-1 text-[12px]">
+            <span className="text-mute">Calculated at 54.5%</span>
+            <span className="font-mono font-semibold text-ink">${calculated.toLocaleString()}</span>
+            <span className="text-mute">NoA shows</span>
+            <span className="font-mono font-semibold text-ink">${target.toLocaleString()}</span>
+            <span className="text-amber-700 font-semibold">Difference</span>
+            <span className="font-mono font-bold text-amber-700">${Math.abs(diff)}</span>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Why this happened</div>
+          <p className="text-mute leading-relaxed">SAGE and Excel round 54.5% differently. This is a system difference, not a data error.</p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Suggested fix</div>
+          <div className="bg-sage-50 border border-sage-300 rounded-md p-3">
+            <div className="text-[13px] text-ink font-medium">Add ${Math.abs(diff)} to Miscellaneous</div>
+            <div className="text-[11px] text-mute mt-0.5">Balances budget to ${target.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onApplyFix}
+            className="flex-1 px-3 py-2 bg-sage-600 text-white rounded-md text-[12px] font-semibold hover:bg-sage-700 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
+            Apply fix
+          </button>
+          <button onClick={onAdjustManually}
+            className="flex-1 px-3 py-2 bg-white border border-bd text-ink rounded-md text-[12px] font-medium hover:bg-surf2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
+            Adjust manually
+          </button>
+        </div>
+      </div>
+
+      {/* Reconciliation summary footer */}
+      <div className="border-t border-bdLt p-4 space-y-1.5 bg-surf2/50">
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-mute">NoA total</span>
+          <span className="font-semibold font-mono">${target.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-mute">Current total</span>
+          <span className="font-semibold font-mono text-amber-700">${currentTotal.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-mute">After fix</span>
+          <span className="font-semibold font-mono text-sage-700 flex items-center gap-1">${target.toLocaleString()} <span aria-hidden>✓</span></span>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+// Amber banner shown above the Import screen when mismatches block submission
+export function ImportBlockerBanner({ count, summary, onApplyFix }: { count: number; summary: string; onApplyFix: () => void }) {
+  return (
+    <div className="bg-amber-50 border border-amber-bd rounded-lg px-5 py-4 flex items-start gap-3">
+      <span className="text-amber-700 text-lg leading-none mt-0.5" aria-hidden>⚠</span>
+      <div className="flex-1 space-y-1">
+        <div className="text-[14px] font-semibold text-amber-700 leading-tight">
+          Budget has {count} unresolved mismatch{count > 1 ? 'es' : ''} — resolve before importing
+        </div>
+        <div className="text-[12px] text-amber-700/90">{summary}</div>
+      </div>
+      <button onClick={onApplyFix}
+        className="px-4 py-2 bg-amber-700 text-white rounded-md text-[12px] font-semibold hover:opacity-90 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 whitespace-nowrap">
+        Apply fix
+      </button>
+    </div>
+  )
+}
+
 // Kept for backward compatibility — single-issue convenience wrapper
 export function BudgetMismatchWarning({
   location, type, correction, onFix, onDismiss,
@@ -363,6 +466,77 @@ export function HamburgerButton({ collapsed, onToggle }: { collapsed: boolean; o
       <span className="w-4 h-[2px] bg-ink rounded-full" />
       <span className="w-4 h-[2px] bg-ink rounded-full" />
     </button>
+  )
+}
+
+// Floating action pill — sits centered above the green footer (no SAGE chip)
+export function FloatingActionBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+      <div className="pointer-events-auto bg-card border border-bdLt rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex items-center gap-1 px-2 py-1.5">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Styled tooltip that floats above its trigger — 1-2 word labels for the floating bar
+function FloatingTip({ children, label }: { children: ReactNode; label: string }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <span className="relative inline-flex items-center"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)} onBlur={() => setHover(false)}>
+      {children}
+      {hover && (
+        <span role="tooltip"
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 bg-ink text-white text-[11px] font-medium rounded-md whitespace-nowrap shadow-lg pointer-events-none">
+          {label}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-x-4 border-x-transparent border-t-4 border-t-ink" />
+        </span>
+      )}
+    </span>
+  )
+}
+
+// Floating bar button — accepts ReactNode icon for composite glyphs (👤+, ✈, etc.)
+export function FloatingBtn({ icon, label, tooltip, onClick, primary, active }: {
+  icon: ReactNode; label?: string; tooltip: string; onClick?: () => void; primary?: boolean; active?: boolean;
+}) {
+  const cls = primary
+    ? 'bg-sage-600 border-sage-700 text-white hover:bg-sage-700'
+    : active
+    ? 'bg-amber-50 border-amber-bd text-amber-700'
+    : 'bg-white border-bd text-ink hover:bg-surf2'
+  const btn = (
+    <button onClick={onClick} aria-label={tooltip}
+      className={`shrink-0 ${label ? 'px-3.5' : 'w-9 justify-center'} h-9 rounded-full border text-[12px] font-medium inline-flex items-center gap-1.5 leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 ${cls}`}>
+      <span aria-hidden className="leading-none flex items-center">{icon}</span>
+      {label && <span className="whitespace-nowrap">{label}</span>}
+    </button>
+  )
+  return <FloatingTip label={tooltip}>{btn}</FloatingTip>
+}
+
+// Modal primitive — for the Upload Documents flow
+export function Modal({ open, onClose, title, children, footer }: {
+  open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode;
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <button onClick={onClose} aria-label="Close modal"
+        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]" />
+      <div className="relative bg-card rounded-xl shadow-2xl w-[520px] max-w-full max-h-[90vh] flex flex-col">
+        <header className="px-5 py-4 border-b border-bdLt flex items-center">
+          <h3 className="text-[15px] font-semibold flex-1">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center text-mute hover:bg-surf2"
+            aria-label="Close">✕</button>
+        </header>
+        <div className="px-5 py-5 overflow-auto flex-1">{children}</div>
+        {footer && <footer className="px-5 py-4 border-t border-bdLt flex gap-3 justify-end">{footer}</footer>}
+      </div>
+    </div>
   )
 }
 

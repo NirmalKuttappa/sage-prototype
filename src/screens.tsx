@@ -1,19 +1,38 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Button, Pill, ConfidenceChip, SourceTag, StaleValue,
   AIDisclaimer, AIToggle, CommentThread, Header, Footer, HamburgerButton,
-  IssuesPanel, StickyCta, type Issue,
+  StickyCta, FloatingActionBar, FloatingBtn, Modal,
+  MismatchPanel, ImportBlockerBanner, type Issue,
   type StepKey,
 } from './ui'
 
-type Nav = { go: (k: StepKey) => void; toast: (m: string) => void; aiOn: boolean; setAiOn: (v: boolean) => void; collapsed: boolean; setCollapsed: (v: boolean) => void }
+export type { Issue } from './ui'
+
+export const INITIAL_ISSUES: Issue[] = [
+  {
+    id: 'iss-fa',
+    cellRef: 'F13',
+    location: 'Indirect Costs · F&A at 54.5% MTDC (row 13)',
+    type: 'Rounding mismatch — system rounding difference, not a data error.',
+    correction: 'Add $41 to Miscellaneous so totals match the NoA.',
+  },
+]
+
+type Nav = {
+  go: (k: StepKey) => void; toast: (m: string) => void;
+  aiOn: boolean; setAiOn: (v: boolean) => void;
+  collapsed: boolean; setCollapsed: (v: boolean) => void;
+  issues: Issue[]; setIssues: (fn: (prev: Issue[]) => Issue[]) => void;
+}
 
 // =====================================================================
 // SCREEN 1 — Summary (eGC1 vs NoA delta) — Green memo: context setup
 // =====================================================================
 export function SummaryScreen({ go, toast }: Nav) {
   return (
-    <div className="flex-1 overflow-auto bg-page">
+    <div className="flex-1 flex flex-col overflow-hidden bg-page">
+      <div className="flex-1 overflow-auto flex flex-col">
       <Header title="A225412 — Linking Lakes and Learners through Science" idChip="ASR draft" />
       <div className="p-8 space-y-5 max-w-[1100px]">
         <div>
@@ -62,6 +81,7 @@ export function SummaryScreen({ go, toast }: Nav) {
           Proceed to Budget Settings
         </Button>
       </StickyCta>
+      </div>
       <Footer />
     </div>
   )
@@ -87,7 +107,8 @@ export function SettingsScreen({ go, toast }: Nav) {
   const [length, setLength] = useState('12')
 
   return (
-    <div className="flex-1 overflow-auto bg-page">
+    <div className="flex-1 flex flex-col overflow-hidden bg-page">
+      <div className="flex-1 overflow-auto flex flex-col">
       <Header title="Copy of Linking Lakes and Learners through Science" idChip="B161463" totals={[
         { label: 'Total Project Costs', value: '$298,500' },
         { label: 'Total Direct Costs', value: '—' },
@@ -133,6 +154,7 @@ export function SettingsScreen({ go, toast }: Nav) {
         <div className="flex-1" />
         <Button variant="primary" onClick={() => { toast('Settings saved. Opening worksheet…'); go('worksheet') }} icon={<span>→</span>}>Save and Open Worksheet</Button>
       </StickyCta>
+      </div>
       <Footer />
     </div>
   )
@@ -183,75 +205,57 @@ function Radio({ checked, label }: { checked: boolean; label: string }) {
 // =====================================================================
 // SCREEN 3 — Budget Worksheet (Excel + Add-In + reconciliation + AI + PDF preview)
 // =====================================================================
-const INITIAL_ISSUES: Issue[] = [
-  {
-    id: 'iss-1',
-    cellRef: 'F4',
-    location: 'Salary and Benefit Costs · Faisal Hossain (row 4)',
-    type: 'Number discrepancy — rounding error.',
-    correction: 'Add $1 to 08 Student Aid so totals match the NoA.',
-  },
-  {
-    id: 'iss-2',
-    cellRef: 'C8',
-    location: 'Travel · AGU Conference — New Orleans (row 8)',
-    type: 'Missing fringe — sponsor requires fringe on travel honoraria.',
-    correction: 'Add $164 fringe (5% × $3,281) to row 8.',
-  },
-  {
-    id: 'iss-3',
-    cellRef: 'F13',
-    location: 'Indirect Costs · F&A at 54.5% MTDC (row 13)',
-    type: 'Calculation drift — F&A re-base needed after equipment add.',
-    correction: 'Recalculate F&A excluding the $5,000 equipment line. Reduce by $2,725.',
-  },
-]
-
-export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollapsed }: Nav) {
-  const [selectedRow, setSelectedRow] = useState<string | null>('grad-ra')
-  const [filledTotal, setFilledTotal] = useState(298499)
+export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollapsed, issues, setIssues }: Nav) {
+  const [selectedRow, setSelectedRow] = useState<string | null>(null)
+  const [filledTotal, setFilledTotal] = useState(298459)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [pdfOpen, setPdfOpen] = useState(false)
-  const [addinOpen, setAddinOpen] = useState(true)
-  const [issues, setIssues] = useState<Issue[]>(INITIAL_ISSUES)
-  const [highlightedCell, setHighlightedCell] = useState<string | null>(null)
+  const [addinOpen, setAddinOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [mismatchView, setMismatchView] = useState(false) // right panel shows mismatch instead of add-in
+  const [highlightedCell] = useState<string | null>(null)
   const target = 298500
   const remaining = target - filledTotal
+  const activeMismatch = issues[0]
 
-  function fixIssue(id: string) {
-    if (id === 'iss-1') setFilledTotal(target)
-    setIssues(prev => prev.filter(i => i.id !== id))
-    toast('Issue resolved.')
-  }
-  function fixAll() {
+  useEffect(() => { setCollapsed(true) }, [setCollapsed])
+
+  function applyMismatchFix() {
     setFilledTotal(target)
-    setIssues([])
-    toast(`Fixed ${issues.length} mismatches. Budget reconciled.`)
+    setIssues(() => [])
+    setMismatchView(false)
+    toast('Fix applied. Budget reconciled to $298,500.')
   }
-  function dismissIssue(id: string) {
-    setIssues(prev => prev.filter(i => i.id !== id))
-    toast('Issue dismissed. Re-validate from the top bar to surface again.')
+
+  function adjustManually() {
+    setMismatchView(false)
+    setSelectedRow('fa')
+    toast('Manual adjustment — edit row 13 directly in the worksheet.')
   }
-  function dismissAll() {
-    setIssues([])
-    toast('All issues dismissed. Re-validate from the top bar to surface again.')
+
+  function openMismatch() {
+    setAddinOpen(true)
+    setMismatchView(true)
+    setSelectedRow('fa')
   }
 
   function runValidate() {
     if (issues.length === 0 && remaining === 0) {
       toast('Validation pass: 12 lines mapped, 0 errors.')
     } else {
-      setIssues(INITIAL_ISSUES)
-      toast(`Validation found ${INITIAL_ISSUES.length} mismatches. See panel above.`)
+      setIssues(() => INITIAL_ISSUES)
+      toast(`Validation found ${INITIAL_ISSUES.length} mismatch. Open the right panel to resolve.`)
+      openMismatch()
     }
   }
 
-  // When PDF panel opens, auto-select Equipment row to show the link
-  function openPdf() {
+  function confirmUpload() {
+    setUploadOpen(false)
     setPdfOpen(true)
+    setAddinOpen(true)
+    setMismatchView(false)
     setSelectedRow('eq')
-    setCollapsed(true) // collapse sidebar to make room (matches Figma W4)
-    toast('Equipment_Invoice_v1.pdf opened — linked to row 10.')
+    toast('Equipment_Invoice_v1.pdf uploaded · linked to row 10.')
   }
 
   return (
@@ -264,7 +268,7 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
           { label: 'Target', value: '$298,500' },
         ]} />
 
-      {/* GREEN MEMO: Live reconciliation bar */}
+      {/* GREEN MEMO: Live reconciliation bar — mismatch chip opens the right panel */}
       <div className="bg-white border-b border-bdLt px-7 py-2.5 flex items-center gap-6 text-[12px]">
         <span className="text-sub uppercase tracking-widest font-semibold whitespace-nowrap">Reconciliation</span>
         <div className="flex items-center gap-2 whitespace-nowrap">
@@ -274,61 +278,42 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
         <span className="text-sub">−</span>
         <div className="flex items-center gap-2 whitespace-nowrap">
           <span className="text-mute">Budget total</span>
-          <span className="font-semibold text-sage-700">${filledTotal.toLocaleString()}</span>
+          <span className={`font-semibold ${remaining === 0 ? 'text-sage-700' : 'text-amber-700'}`}>${filledTotal.toLocaleString()}</span>
         </div>
         <span className="text-sub">=</span>
         <div className="flex items-center gap-2 whitespace-nowrap">
           <span className="text-mute">Delta</span>
-          <span className={`font-semibold ${remaining === 0 ? 'text-sage-700' : 'text-red'}`}>
+          <span className={`font-semibold ${remaining === 0 ? 'text-sage-700' : 'text-amber-700'}`}>
             {remaining === 0 ? 'Balanced ✓' : remaining > 0 ? `$${remaining.toLocaleString()} short` : `$${Math.abs(remaining).toLocaleString()} over`}
           </span>
         </div>
+        {issues.length > 0 && (
+          <button onClick={openMismatch}
+            className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-bd text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-700">
+            <span aria-hidden>⚠</span>
+            {issues.length} mismatch{issues.length > 1 ? 'es' : ''} · Resolve →
+          </button>
+        )}
         <div className="flex-1" />
         <AIToggle on={aiOn} onChange={setAiOn} derivedCount={4} />
       </div>
 
-      {/* Issues panel — top section, with breathing room before the Excel surface */}
-      {issues.length > 0 && (
-        <div className="bg-page px-7 pt-4 pb-5">
-          <IssuesPanel
-            issues={issues}
-            onFix={fixIssue}
-            onFixAll={fixAll}
-            onDismiss={dismissIssue}
-            onDismissAll={dismissAll}
-            onHover={setHighlightedCell}
-          />
-        </div>
-      )}
-
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* PDF preview panel — slides in when pdfOpen */}
         {pdfOpen && <PdfPreviewPanel onClose={() => setPdfOpen(false)} />}
 
         {/* Excel-like worksheet */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          {/* NEW TOP BAR — file actions instead of just tabs */}
-          <div className="bg-surf2 border-b border-bdLt h-12 flex items-center gap-2 text-[12px] px-3 overflow-x-auto">
-            <span className="px-3 py-1.5 rounded-md bg-sage-600 text-white font-semibold text-[12px] whitespace-nowrap shrink-0">SAGE Add-In</span>
-            <span className="w-px h-6 bg-bd shrink-0" />
-            <ToolBtn icon="📤" label="Upload file" onClick={() => toast('File picker opened (demo).')} primary />
-            <ToolBtn icon="📁" label="Manage attachments" onClick={openPdf} active={pdfOpen} />
-            <span className="w-px h-6 bg-bd shrink-0" />
-            <ToolBtn icon="＋" label="Add personnel" onClick={() => { setAddinOpen(true); setSelectedRow('grad-ra'); toast('Add personnel — fill in the right panel.') }} />
-            <ToolBtn icon="＋" label="Add travel" onClick={() => { setAddinOpen(true); setSelectedRow('agu'); toast('Add travel — fill in the right panel.') }} />
-            <ToolBtn icon="🔍" label="Lookup salary" onClick={() => { setAddinOpen(true); setSelectedRow('grad-ra'); toast('Salary lookup opened in the right panel.') }} />
-            <span className="w-px h-6 bg-bd shrink-0" />
-            <ToolBtn icon="✓" label="Validate" onClick={runValidate} />
-            <div className="flex-1 min-w-2" />
-            <span className="text-[10px] text-mute whitespace-nowrap shrink-0">LinkingLakes_Period1.xlsx</span>
-            <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-sage-50 text-[10px] text-sage-700 font-medium whitespace-nowrap shrink-0">
+          {/* Formula bar + filename meta (top action bar relocated to floating pill) */}
+          <div className="bg-white border-b border-bdLt h-9 px-4 flex items-center gap-3 text-[11px]">
+            <span className="text-mute font-medium">{selectedRow === 'eq' ? 'F10' : 'C7'}</span>
+            <span className="text-sub">ƒx</span>
+            <span className="text-ink">{selectedRow === 'eq' ? '5000' : '=Salary.Lookup("GradRA","Sch1","Doctoral")'}</span>
+            <div className="flex-1" />
+            <span className="text-[10px] text-mute whitespace-nowrap">LinkingLakes_Period1.xlsx</span>
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-sage-50 text-[10px] text-sage-700 font-medium whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-sage-500" /> Saved 12s ago
             </span>
-          </div>
-          <div className="bg-white border-b border-bdLt h-7 px-3 flex items-center gap-2 text-[11px]">
-            <span className="text-mute font-medium">C7</span>
-            <span className="text-sub">ƒx</span>
-            <span>=Salary.Lookup("GradRA","Sch1","Doctoral")</span>
           </div>
 
           {/* Column headers */}
@@ -392,8 +377,18 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
           </div>
         </div>
 
-        {/* SAGE Add-In side panel — closable */}
-        {addinOpen && <aside className="w-[340px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
+        {/* Right panel — switches between Mismatch resolution and SAGE Add-In */}
+        {addinOpen && mismatchView && activeMismatch && (
+          <MismatchPanel
+            issue={activeMismatch}
+            currentTotal={filledTotal}
+            target={target}
+            onApplyFix={applyMismatchFix}
+            onAdjustManually={adjustManually}
+            onClose={() => setMismatchView(false)}
+          />
+        )}
+        {addinOpen && !mismatchView && <aside className="w-[340px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
           <div className="bg-sage-700 text-white px-4 py-3 flex items-center justify-between text-[13px] font-semibold">
             <span>SAGE Add-In</span>
             <div className="flex gap-1">
@@ -470,7 +465,67 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
             <Button variant="primary" onClick={() => go('import')} icon={<span>→</span>}>Import to SAGE</Button>
           </div>
         </aside>}
+
+        {/* Floating action dock — distinct icons with hover tooltips */}
+        <FloatingActionBar>
+          <FloatingBtn primary tooltip="Upload" onClick={() => setUploadOpen(true)}
+            icon={<UploadIcon />} label={pdfOpen ? undefined : "Upload"} />
+          <FloatingBtn active={pdfOpen} tooltip={pdfOpen ? "Hide PDF" : "Attachments"}
+            onClick={() => { setPdfOpen(!pdfOpen); if (!pdfOpen) { setAddinOpen(true); setSelectedRow('eq') } }}
+            icon={<PaperclipIcon />} />
+          <FloatingBtn tooltip="Personnel"
+            onClick={() => { setAddinOpen(true); setSelectedRow('grad-ra'); toast('Add personnel — fill in the right panel.') }}
+            icon={<PersonAddIcon />} />
+          <FloatingBtn tooltip="Travel"
+            onClick={() => { setAddinOpen(true); setSelectedRow('agu'); toast('Add travel — fill in the right panel.') }}
+            icon={<PlaneAddIcon />} />
+          <FloatingBtn tooltip="Lookup"
+            onClick={() => { setAddinOpen(true); setSelectedRow('grad-ra'); toast('Salary lookup opened in the right panel.') }}
+            icon={<LookupIcon />} />
+          <FloatingBtn tooltip="Validate" onClick={runValidate} icon={<CheckIcon />} />
+        </FloatingActionBar>
       </div>
+
+      {/* Upload documents modal */}
+      <Modal open={uploadOpen} onClose={() => setUploadOpen(false)}
+        title="Upload documents"
+        footer={<>
+          <Button variant="ghost" onClick={() => setUploadOpen(false)}>Cancel</Button>
+          <Button variant="primary" onClick={confirmUpload} icon={<span>→</span>}>Upload &amp; link</Button>
+        </>}
+      >
+        <p className="text-[13px] text-mute mb-4">Attach a PDF, DOCX, or quote file. SAGE will OCR the document and suggest a row to link it to.</p>
+
+        {/* Dropzone */}
+        <div className="border-2 border-dashed border-bd rounded-lg px-6 py-8 text-center bg-surf2/40 hover:bg-surf2 transition cursor-pointer">
+          <div className="text-3xl mb-2" aria-hidden>📤</div>
+          <div className="text-[14px] font-medium mb-1">Drop a file here, or click to browse</div>
+          <div className="text-[11px] text-sub">PDF, DOCX, XLSX · up to 25 MB</div>
+        </div>
+
+        {/* Pre-selected file (demo) */}
+        <div className="mt-4 p-3 border border-bdLt rounded-lg flex items-center gap-3 bg-card">
+          <span className="text-xl" aria-hidden>📎</span>
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold">Equipment_Invoice_v1.pdf</div>
+            <div className="text-[11px] text-sub">Biotech Systems Inc. · 142 KB · scanned 2 min ago</div>
+          </div>
+          <span className="px-2 py-1 rounded-full bg-sage-100 text-sage-700 text-[10px] font-semibold">OCR ✓</span>
+        </div>
+
+        {/* Suggested link target */}
+        <div className="mt-4 p-3 border border-amber-bd bg-yellow-hi/40 rounded-lg space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-700">Suggested link</span>
+            <span className="px-2 py-0.5 rounded-full bg-white border border-amber-bd text-amber-700 text-[10px] font-bold font-mono">F10</span>
+          </div>
+          <div className="text-[13px] text-ink leading-relaxed">
+            <span className="font-semibold">Equipment</span> · row 10 · Sequencer · <span className="font-semibold">$5,000</span>
+          </div>
+          <div className="text-[11px] text-mute">Match confidence: <span className="font-semibold text-sage-700">High</span> — the invoice line "$5,000.00" matches row 10 cost exactly.</div>
+        </div>
+      </Modal>
+
       <Footer summary={`Sum: $${filledTotal.toLocaleString()}  ·  Target: $${target.toLocaleString()}`} />
     </div>
   )
@@ -603,25 +658,37 @@ function PdfPreviewPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
-// Top-bar action button used in the new Excel-style ribbon
-function ToolBtn({ icon, label, onClick, primary, active }: { icon: string; label: string; onClick?: () => void; primary?: boolean; active?: boolean }) {
-  const cls = primary
-    ? 'bg-sage-50 border-sage-500 text-sage-700 hover:bg-sage-100'
-    : active
-    ? 'bg-amber-50 border-amber-bd text-amber-700'
-    : 'bg-white border-bd text-ink hover:bg-surf2'
-  return (
-    <button onClick={onClick}
-      className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md border text-[11px] font-medium inline-flex items-center gap-1.5 leading-none transition ${cls}`}>
-      <span aria-hidden className="leading-none">{icon}</span>
-      <span className="whitespace-nowrap">{label}</span>
-    </button>
-  )
-}
-
 function Cell({ children, w, highlight }: { children: React.ReactNode; w: string; highlight?: boolean }) {
   return <div className={`px-2 border-r border-bdLt h-full flex items-center ${highlight ? 'bg-sage-50/40' : ''}`} style={{ width: w }}>{children}</div>
 }
+
+// Floating dock icons — Lucide-style line drawings via SVG
+const Svg = ({ children }: { children: React.ReactNode }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {children}
+  </svg>
+)
+function UploadIcon()    { return <Svg><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></Svg> }
+function PaperclipIcon() { return <Svg><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></Svg> }
+function PersonAddIcon() {
+  return (
+    <Svg>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </Svg>
+  )
+}
+function PlaneAddIcon() {
+  return (
+    <Svg>
+      <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+    </Svg>
+  )
+}
+function LookupIcon()    { return <Svg><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Svg> }
+function CheckIcon()     { return <Svg><polyline points="20 6 9 17 4 12" /></Svg> }
 
 // Placeholder shown in AI-derived cells when AI assist is OFF
 function PlaceholderCell({ label }: { label: string }) {
@@ -673,11 +740,14 @@ function Suggestion({ text, onAccept }: { text: string; onAccept: () => void }) 
 // =====================================================================
 // SCREEN 4 — Import to SAGE (mapping preview + checklist + submit gate)
 // =====================================================================
-export function ImportScreen({ go, toast }: Nav) {
+export function ImportScreen({ go, toast, issues }: Nav) {
   const [piSfiDone, setPiSfiDone] = useState(false)
+  const hasMismatch = issues.length > 0
+  const blockSubmit = hasMismatch || !piSfiDone
 
   return (
-    <div className="flex-1 overflow-auto bg-page">
+    <div className="flex-1 flex flex-col overflow-hidden bg-page">
+      <div className="flex-1 overflow-auto flex flex-col">
       <Header title="A225412 — Linking Lakes and Learners" idChip="ASR ready to submit" status=""
         totals={[
           { label: 'Total Project Costs', value: '$298,500' },
@@ -690,10 +760,18 @@ export function ImportScreen({ go, toast }: Nav) {
           <p className="text-mute text-[13px] mt-1">Review the field mapping below, then confirm the import to SAGE Budget format.</p>
         </div>
 
-        <div className="bg-sage-50 border border-sage-500 rounded-md px-4 py-3 flex items-center gap-3 text-[13px] text-sage-700 font-medium">
-          <span>✓</span>
-          <span>Budget balanced — $298,500 matches the awarded total. Ready to import.</span>
-        </div>
+        {hasMismatch ? (
+          <ImportBlockerBanner
+            count={issues.length}
+            summary="F&A rounding difference of $41. Apply the suggested fix or adjust manually."
+            onApplyFix={() => { toast('Returning to worksheet — open the right panel to apply the fix.'); go('worksheet') }}
+          />
+        ) : (
+          <div className="bg-sage-50 border border-sage-500 rounded-md px-4 py-3 flex items-center gap-3 text-[13px] text-sage-700 font-medium">
+            <span>✓</span>
+            <span>Budget balanced — $298,500 matches the awarded total. Ready to import.</span>
+          </div>
+        )}
 
         {/* GREEN MEMO: Mapping table preview */}
         <div className="bg-white border border-bdLt rounded-lg overflow-hidden">
@@ -711,20 +789,26 @@ export function ImportScreen({ go, toast }: Nav) {
             { line: 'TBD Grad RA x2 — tuition', meta: <Pill tone="purple">OPB</Pill>, amount: '$41,418', code: '08-05 Tuition', effort: 'n/a' },
             { line: 'Travel — AGU Conference', meta: null, amount: '$3,281', code: '04-00 Travel', effort: 'n/a' },
             { line: 'Supplies', meta: null, amount: '$5,000', code: '05-00 Supplies', effort: 'n/a' },
-            { line: 'F&A — indirect costs', meta: <Pill>54.5% MTDC</Pill>, amount: '$171,718', code: 'F&A', effort: 'n/a' },
+            { line: 'F&A — indirect costs', meta: <Pill>54.5% MTDC</Pill>, amount: hasMismatch ? '$149,959' : '$150,000', code: 'F&A', effort: 'n/a', mismatch: hasMismatch },
           ].map((r, i) => (
-            <div key={i} className="grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-5 py-3 text-[12px] border-b border-bdLt items-center">
+            <div key={i} className={`grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-5 py-3 text-[12px] border-b border-bdLt items-center ${r.mismatch ? 'bg-amber-50' : ''}`}>
               <span className="flex items-center gap-2">{r.line} {r.meta}</span>
-              <span className="font-semibold">{r.amount}</span>
+              <span className={`font-semibold ${r.mismatch ? 'text-amber-700' : ''}`}>{r.amount}</span>
               <span>{r.code}</span>
               <span>{r.effort}</span>
-              <span className="text-sage-700 font-medium">✓ Mapped</span>
+              {r.mismatch
+                ? <Pill tone="amber">Mismatch</Pill>
+                : <span className="text-sage-700 font-medium">✓ Mapped</span>}
             </div>
           ))}
-          <div className="bg-surf2 grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-5 py-3.5 text-[13px] items-center">
+          <div className={`grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-5 py-3.5 text-[13px] items-center ${hasMismatch ? 'bg-amber-50 border-t-2 border-amber-bd' : 'bg-surf2'}`}>
             <span className="font-semibold">Total</span>
-            <span className="font-bold text-sage-700">$298,500</span>
-            <span className="text-sage-700 font-medium">✓ Matches awarded total</span>
+            <span className={`font-bold ${hasMismatch ? 'text-amber-700' : 'text-sage-700'}`}>${(hasMismatch ? 298459 : 298500).toLocaleString()}</span>
+            <span className="text-[11px]">
+              {hasMismatch
+                ? <span className="px-2 py-1 rounded bg-amber-bd/40 border border-amber-bd text-amber-700 font-semibold">$41 below NoA — fix required</span>
+                : <span className="text-sage-700 font-medium">✓ Matches awarded total</span>}
+            </span>
             <span></span><span></span>
           </div>
         </div>
@@ -734,7 +818,9 @@ export function ImportScreen({ go, toast }: Nav) {
           <div className="px-5 py-3.5 border-b border-bdLt">
             <h3 className="text-[13px] font-semibold">Pre-submission checklist</h3>
           </div>
-          <Check icon="✓" tone="green" bold="Budget linked and balanced" mute="$298,500 matches awarded total" />
+          {hasMismatch
+            ? <Check icon="!" tone="amber" bold="Budget mismatch unresolved" mute="$41 off. Apply fix before import." />
+            : <Check icon="✓" tone="green" bold="Budget linked and balanced" mute="$298,500 matches awarded total" />}
           <Check icon="✓" tone="green" bold="Notice of Award attached" />
           <Check icon="✓" tone="green" bold="Request Summary complete" mute="dates, sponsor total, PI confirmed" />
           <Check icon={piSfiDone ? '✓' : '!'} tone={piSfiDone ? 'green' : 'amber'} bold="PI SFI disclosure" mute={piSfiDone ? 'Completed by PI 2 min ago.' : 'awaiting PI action. Cannot be completed by GM.'} />
@@ -749,16 +835,21 @@ export function ImportScreen({ go, toast }: Nav) {
       <StickyCta hint="Step 4 of 4 · Confirm and submit">
         <Button variant="ghost" onClick={() => go('worksheet')}>← Back to worksheet</Button>
         <div className="flex-1" />
-        <Button variant="secondary" onClick={() => { setTimeout(() => setPiSfiDone(true), 600); toast('SFI reminder sent to Dr. Hossain. (Demo: PI completes in 600ms)') }}>
-          Send SFI reminder to PI
-        </Button>
+        {hasMismatch
+          ? <Button variant="primary" onClick={() => { toast('Returning to worksheet to apply the fix.'); go('worksheet') }}>Apply fix and import</Button>
+          : <Button variant="secondary" onClick={() => { setTimeout(() => setPiSfiDone(true), 600); toast('SFI reminder sent to Dr. Hossain. (Demo: PI completes in 600ms)') }}>
+              Send SFI reminder to PI
+            </Button>}
         <Button
-          variant={piSfiDone ? 'primary' : 'disabled'}
-          onClick={() => piSfiDone && toast('ASR submitted. Routing to Department › OSP › GCA.')}
+          variant={blockSubmit ? 'disabled' : 'primary'}
+          onClick={() => !blockSubmit && toast('ASR submitted. Routing to Department › OSP › GCA.')}
         >
-          {piSfiDone ? 'Submit ASR' : 'Submit ASR — waiting for PI SFI'}
+          {hasMismatch ? 'Import to SAGE — resolve mismatch first'
+            : piSfiDone ? 'Submit ASR'
+            : 'Submit ASR — waiting for PI SFI'}
         </Button>
       </StickyCta>
+      </div>
       <Footer />
     </div>
   )

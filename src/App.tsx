@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sidebar, FeedbackToast, type StepKey } from './ui'
-import { SummaryScreen, SettingsScreen, WorksheetScreen, ImportScreen } from './screens'
+import { SummaryScreen, SettingsScreen, WorksheetScreen, ImportScreen, INITIAL_ISSUES, type Issue } from './screens'
 
 export default function App() {
   const [active, setActive] = useState<StepKey>('summary')
@@ -9,6 +9,7 @@ export default function App() {
   const [toastOn, setToastOn] = useState(false)
   const [aiOn, setAiOn] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
+  const [issues, setIssues] = useState<Issue[]>(INITIAL_ISSUES)
 
   function go(k: StepKey) {
     setCompleted(prev => new Set(prev).add(active))
@@ -22,7 +23,7 @@ export default function App() {
     setTimeout(() => setToastOn(false), 3200)
   }
 
-  const props = { go, toast, aiOn, setAiOn, collapsed, setCollapsed }
+  const props = { go, toast, aiOn, setAiOn, collapsed, setCollapsed, issues, setIssues }
 
   return (
     <div className="h-screen flex">

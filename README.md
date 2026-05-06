@@ -54,7 +54,7 @@ src/
 
 ```bash
 npm install
-npm run dev          # starts Vite at http://localhost:5174/
+npm run dev          # starts Vite at http://localhost:5180/
 npm run build        # production build into dist/
 ```
 
