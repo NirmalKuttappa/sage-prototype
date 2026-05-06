@@ -828,13 +828,14 @@ function PIReviewPanel({
   onSendReply: () => void;
   onClose: () => void;
 }) {
-  const [replies, setReplies] = useState<{ text: string; time: string }[]>([])
-
-  const statusConfig = {
-    sent:              { dot: 'bg-amber-500', pill: 'bg-amber-50 border-amber-bd text-amber-700',  label: 'Awaiting PI review' },
-    approved:          { dot: 'bg-sage-500',  pill: 'bg-sage-50 border-sage-400 text-sage-700',    label: 'Approved by PI' },
-    changes_requested: { dot: 'bg-red',       pill: 'bg-red-50 border-red/50 text-red',            label: 'Changes requested by PI' },
-  }[status] ?? { dot: 'bg-amber-500', pill: 'bg-amber-50 border-amber-bd text-amber-700', label: 'Awaiting PI review' }
+  const idleCfg = { dot: 'bg-amber-500', pill: 'bg-amber-50 border-amber-bd text-amber-700', label: 'Awaiting PI review' }
+  const statusConfig: Record<typeof status, { dot: string; pill: string; label: string }> = {
+    idle:              idleCfg,
+    sent:              { dot: 'bg-amber-500',  pill: 'bg-amber-50 border-amber-bd text-amber-700',         label: 'Awaiting PI review' },
+    approved:          { dot: 'bg-sage-500',   pill: 'bg-sage-50 border-sage-400 text-sage-700',           label: 'Approved by PI' },
+    changes_requested: { dot: 'bg-red',        pill: 'bg-red-50 border-red/50 text-red',                   label: 'Changes requested by PI' },
+  }
+  const cfg = statusConfig[status] ?? idleCfg
 
   function handleSend() {
     if (!piComment.trim()) return
@@ -886,9 +887,9 @@ function PIReviewPanel({
         {/* Status pill */}
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Status</div>
-          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${statusConfig.pill}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} aria-hidden />
-            {statusConfig.label}
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${cfg.pill}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} aria-hidden />
+            {cfg.label}
           </div>
           <div className="text-[11px] text-mute">
             Sent today at {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · B161463
