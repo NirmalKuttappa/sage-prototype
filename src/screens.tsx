@@ -30,6 +30,7 @@ type Nav = {
 // SCREEN 1 — Summary (eGC1 vs NoA delta) — Green memo: context setup
 // =====================================================================
 export function SummaryScreen({ go, toast }: Nav) {
+  const [piNotified, setPiNotified] = useState(false)
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
       <div className="flex-1 overflow-auto flex flex-col">
@@ -75,7 +76,12 @@ export function SummaryScreen({ go, toast }: Nav) {
         </div>
       </div>
       <StickyCta hint="Step 1 of 4 · Review award changes">
-        <Button variant="ghost">Notify PI of changes first</Button>
+        {piNotified
+          ? <button disabled className="px-5 py-3 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 bg-sage-600 text-white cursor-default">
+              <span>✓</span> PI has been notified
+            </button>
+          : <Button variant="ghost" onClick={() => { setPiNotified(true); toast('PI notified of award changes.') }}>Notify PI of changes first</Button>
+        }
         <div className="flex-1" />
         <Button variant="primary" onClick={() => { toast('Award delta acknowledged. Moving to Budget Settings.'); go('settings') }} icon={<span>→</span>}>
           Proceed to Budget Settings
