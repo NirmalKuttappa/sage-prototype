@@ -214,9 +214,29 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
   const [uploadOpen, setUploadOpen] = useState(false)
   const [mismatchView, setMismatchView] = useState(false) // right panel shows mismatch instead of add-in
   const [highlightedCell] = useState<string | null>(null)
+  const [piReviewOpen, setPiReviewOpen] = useState(false)
+  const [piReviewStatus, setPiReviewStatus] = useState<'idle' | 'sent' | 'approved' | 'changes_requested'>('idle')
+  const [piComment, setPiComment] = useState('')
   const target = 298500
   const remaining = target - filledTotal
   const activeMismatch = issues[0]
+
+  function sendForPiReview() {
+    setPiReviewOpen(true)
+    setAddinOpen(false)
+    setMismatchView(false)
+    if (piReviewStatus === 'idle') {
+      setPiReviewStatus('sent')
+      toast('Budget sent to Dr. Faisal Hossain for review.')
+    }
+  }
+
+  function simulatePiDecision(decision: 'approved' | 'changes_requested') {
+    setPiReviewStatus(decision)
+    toast(decision === 'approved'
+      ? 'PI approved the budget draft.'
+      : 'PI has requested changes — review their comments.')
+  }
 
   useEffect(() => { setCollapsed(true) }, [setCollapsed])
 
@@ -377,7 +397,16 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
           </div>
         </div>
 
-        {/* Right panel — switches between Mismatch resolution and SAGE Add-In */}
+        {/* Right panel — switches between PI Review, Mismatch resolution and SAGE Add-In */}
+        {piReviewOpen && (
+          <PIReviewPanel
+            status={piReviewStatus}
+            piComment={piComment}
+            onPiCommentChange={setPiComment}
+            onSimulateDecision={simulatePiDecision}
+            onClose={() => setPiReviewOpen(false)}
+          />
+        )}
         {addinOpen && mismatchView && activeMismatch && (
           <MismatchPanel
             issue={activeMismatch}
@@ -388,7 +417,7 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
             onClose={() => setMismatchView(false)}
           />
         )}
-        {addinOpen && !mismatchView && <aside className="w-[340px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
+        {addinOpen && !mismatchView && !piReviewOpen && <aside className="w-[340px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
           <div className="bg-sage-700 text-white px-4 py-3 flex items-center justify-between text-[13px] font-semibold">
             <span>SAGE Add-In</span>
             <div className="flex gap-1">
@@ -483,6 +512,18 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
             onClick={() => { setAddinOpen(true); setSelectedRow('grad-ra'); toast('Salary lookup opened in the right panel.') }}
             icon={<LookupIcon />} />
           <FloatingBtn tooltip="Validate" onClick={runValidate} icon={<CheckIcon />} />
+          {piReviewStatus === 'idle' && (
+            <FloatingBtn tooltip="Send budget to PI for review" onClick={sendForPiReview} icon={<SendReviewIcon />} label="Send for Review" />
+          )}
+          {piReviewStatus === 'sent' && (
+            <FloatingBtn active={piReviewOpen} tooltip="View PI review status" onClick={() => setPiReviewOpen(true)} icon={<ExternalLinkIcon />} label="Under Review" />
+          )}
+          {piReviewStatus === 'approved' && (
+            <FloatingBtnGreen tooltip="PI approved the budget" onClick={() => setPiReviewOpen(true)} icon={<ExternalLinkIcon />} label="Reviewed" />
+          )}
+          {piReviewStatus === 'changes_requested' && (
+            <FloatingBtnAlert tooltip="PI has requested changes" onClick={() => setPiReviewOpen(true)} icon={<ExternalLinkIcon />} label="Action Required" />
+          )}
         </FloatingActionBar>
       </div>
 
@@ -689,6 +730,12 @@ function PlaneAddIcon() {
 }
 function LookupIcon()    { return <Svg><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Svg> }
 function CheckIcon()     { return <Svg><polyline points="20 6 9 17 4 12" /></Svg> }
+function SendReviewIcon() {
+  return <Svg><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>
+}
+function ExternalLinkIcon() {
+  return <Svg><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></Svg>
+}
 
 // Placeholder shown in AI-derived cells when AI assist is OFF
 function PlaceholderCell({ label }: { label: string }) {
@@ -720,6 +767,190 @@ function Reconcile({ k, v, tone }: { k: string; v: string; tone?: 'sage' | 'ambe
       <span className="text-mute">{k}</span>
       <span className={`font-semibold ${color}`}>{v}</span>
     </div>
+  )
+}
+
+function FloatingBtnGreen({ icon, label, tooltip, onClick }: { icon: React.ReactNode; label: string; tooltip: string; onClick?: () => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <span className="relative inline-flex items-center" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <button onClick={onClick} aria-label={tooltip}
+        className="shrink-0 px-3.5 h-9 rounded-full border text-[12px] font-medium inline-flex items-center gap-1.5 leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 bg-sage-50 border-sage-500 text-sage-700 hover:bg-sage-100">
+        <span aria-hidden className="leading-none flex items-center">{icon}</span>
+        <span className="whitespace-nowrap">{label}</span>
+      </button>
+      {hover && (
+        <span role="tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 bg-ink text-white text-[11px] font-medium rounded-md whitespace-nowrap shadow-lg pointer-events-none">
+          {tooltip}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-x-4 border-x-transparent border-t-4 border-t-ink" />
+        </span>
+      )}
+    </span>
+  )
+}
+
+function FloatingBtnAlert({ icon, label, tooltip, onClick }: { icon: React.ReactNode; label: string; tooltip: string; onClick?: () => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <span className="relative inline-flex items-center" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <button onClick={onClick} aria-label={tooltip}
+        className="shrink-0 px-3.5 h-9 rounded-full border text-[12px] font-medium inline-flex items-center gap-1.5 leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red bg-red-50 border-red text-red hover:bg-red/10">
+        <span aria-hidden className="leading-none flex items-center">{icon}</span>
+        <span className="whitespace-nowrap">{label}</span>
+      </button>
+      {hover && (
+        <span role="tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 bg-ink text-white text-[11px] font-medium rounded-md whitespace-nowrap shadow-lg pointer-events-none">
+          {tooltip}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-x-4 border-x-transparent border-t-4 border-t-ink" />
+        </span>
+      )}
+    </span>
+  )
+}
+
+// =====================================================================
+// PI Review Panel — clean status-driven panel, no action buttons
+// =====================================================================
+function PIReviewPanel({
+  status, piComment, onPiCommentChange, onSimulateDecision, onClose,
+}: {
+  status: 'idle' | 'sent' | 'approved' | 'changes_requested';
+  piComment: string;
+  onPiCommentChange: (v: string) => void;
+  onSimulateDecision: (d: 'approved' | 'changes_requested') => void;
+  onClose: () => void;
+}) {
+  const statusConfig = {
+    sent:              { dot: 'bg-amber-500',  pill: 'bg-amber-50 border-amber-bd text-amber-700',         label: 'Awaiting PI review' },
+    approved:          { dot: 'bg-sage-500',   pill: 'bg-sage-50 border-sage-400 text-sage-700',           label: 'Approved by PI' },
+    changes_requested: { dot: 'bg-red',        pill: 'bg-red-50 border-red/50 text-red',                   label: 'Changes requested by PI' },
+  }[status] ?? { dot: 'bg-amber-500', pill: 'bg-amber-50 border-amber-bd text-amber-700', label: 'Awaiting PI review' }
+
+  return (
+    <aside className="w-[320px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-bdLt flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-ink">PI Review</span>
+        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded text-sub hover:bg-surf2 hover:text-ink" aria-label="Close panel">✕</button>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4 space-y-5 text-[12px]">
+
+        {/* Status */}
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Status</div>
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${statusConfig.pill}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} aria-hidden />
+            {statusConfig.label}
+          </div>
+          <div className="text-[11px] text-mute">
+            Sent today at {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · B161463
+          </div>
+        </div>
+
+        {/* PI info */}
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Principal Investigator</div>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-sage-100 text-sage-700 flex items-center justify-center text-[13px] font-bold flex-shrink-0">H</div>
+            <div>
+              <div className="text-[13px] font-semibold text-ink leading-tight">Dr. Faisal Hossain</div>
+              <div className="text-[11px] text-mute">Principal Investigator · HCDE</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] text-sage-700">
+            <span aria-hidden>✉</span>
+            <a href="mailto:fhossain@uw.edu" className="underline underline-offset-2 decoration-dotted hover:text-sage-900">fhossain@uw.edu</a>
+          </div>
+        </div>
+
+        <div className="border-t border-bdLt" />
+
+        {/* Awaiting — simulate PI response for demo */}
+        {status === 'sent' && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-mute leading-relaxed">Waiting for Dr. Hossain to respond. Simulate a PI decision below.</p>
+            <button
+              onClick={() => onSimulateDecision('approved')}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surf2 border border-bd rounded-lg text-[12px] font-medium text-ink hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
+            >
+              <span aria-hidden className="text-sm">↻</span> Refresh status
+            </button>
+            <button
+              onClick={() => onSimulateDecision('changes_requested')}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-bd rounded-lg text-[11px] text-mute hover:bg-surf2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
+            >
+              Simulate: PI requests changes
+            </button>
+          </div>
+        )}
+
+        {/* Approved */}
+        {status === 'approved' && (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Decision</div>
+              <div className="flex items-center gap-2 text-[12px] font-medium text-sage-700">
+                <span className="w-4 h-4 rounded-full bg-sage-600 text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">✓</span>
+                Approved by Dr. Faisal Hossain · just now
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Comment</div>
+              <div className="bg-surf2 rounded-lg px-3 py-2.5 space-y-1">
+                <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
+                <p className="text-[12px] text-ink leading-relaxed">Looks good overall. Grad RA salary and tuition numbers match what I expected. Approved.</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Your reply</div>
+              <textarea
+                value={piComment}
+                onChange={e => onPiCommentChange(e.target.value)}
+                placeholder="Reply to Dr. Hossain…"
+                rows={3}
+                className="w-full px-3 py-2 text-[12px] border border-bd rounded-lg resize-none focus:outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Changes requested */}
+        {status === 'changes_requested' && (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Decision</div>
+              <div className="flex items-center gap-2 text-[12px] font-medium text-red">
+                <span className="w-4 h-4 rounded-full bg-red text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">!</span>
+                Changes requested by Dr. Faisal Hossain · just now
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Comment</div>
+              <div className="bg-red-50 border border-red/20 rounded-lg px-3 py-2.5 space-y-1">
+                <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
+                <p className="text-[12px] text-ink leading-relaxed">Please revisit the international travel line — we're removing that for Period 1. Also confirm the Grad RA count; I think we only need one for this period.</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Your reply</div>
+              <textarea
+                value={piComment}
+                onChange={e => onPiCommentChange(e.target.value)}
+                placeholder="Reply to Dr. Hossain…"
+                rows={3}
+                className="w-full px-3 py-2 text-[12px] border border-bd rounded-lg resize-none focus:outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-bdLt px-4 py-2.5 text-[11px] text-sub">
+        Budget draft B161463 · Period 1 of 5
+      </div>
+    </aside>
   )
 }
 
