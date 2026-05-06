@@ -30,6 +30,7 @@ type Nav = {
 // SCREEN 1 — Summary (eGC1 vs NoA delta) — Green memo: context setup
 // =====================================================================
 export function SummaryScreen({ go, toast }: Nav) {
+  const [piNotified, setPiNotified] = useState(false)
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
       <div className="flex-1 overflow-auto flex flex-col">
@@ -75,7 +76,12 @@ export function SummaryScreen({ go, toast }: Nav) {
         </div>
       </div>
       <StickyCta hint="Step 1 of 4 · Review award changes">
-        <Button variant="ghost">Notify PI of changes first</Button>
+        {piNotified
+          ? <button disabled className="px-5 py-3 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 bg-sage-600 text-white cursor-default">
+              <span>✓</span> PI has been notified
+            </button>
+          : <Button variant="ghost" onClick={() => { setPiNotified(true); toast('PI notified of award changes.') }}>Notify PI of changes first</Button>
+        }
         <div className="flex-1" />
         <Button variant="primary" onClick={() => { toast('Award delta acknowledged. Moving to Budget Settings.'); go('settings') }} icon={<span>→</span>}>
           Proceed to Budget Settings
@@ -404,6 +410,7 @@ export function WorksheetScreen({ go, toast, aiOn, setAiOn, collapsed, setCollap
             piComment={piComment}
             onPiCommentChange={setPiComment}
             onSimulateDecision={simulatePiDecision}
+            onSendReply={() => setPiReviewStatus('sent')}
             onClose={() => setPiReviewOpen(false)}
           />
         )}
@@ -809,15 +816,16 @@ function FloatingBtnAlert({ icon, label, tooltip, onClick }: { icon: React.React
 }
 
 // =====================================================================
-// PI Review Panel — clean status-driven panel, no action buttons
+// PI Review Panel — with reply thread and send button
 // =====================================================================
 function PIReviewPanel({
-  status, piComment, onPiCommentChange, onSimulateDecision, onClose,
+  status, piComment, onPiCommentChange, onSimulateDecision, onSendReply, onClose,
 }: {
   status: 'idle' | 'sent' | 'approved' | 'changes_requested';
   piComment: string;
   onPiCommentChange: (v: string) => void;
   onSimulateDecision: (d: 'approved' | 'changes_requested') => void;
+  onSendReply: () => void;
   onClose: () => void;
 }) {
   const idleCfg = { dot: 'bg-amber-500', pill: 'bg-amber-50 border-amber-bd text-amber-700', label: 'Awaiting PI review' }
@@ -829,6 +837,43 @@ function PIReviewPanel({
   }
   const cfg = statusConfig[status] ?? idleCfg
 
+  function handleSend() {
+    if (!piComment.trim()) return
+    setReplies(prev => [...prev, {
+      text: piComment.trim(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }])
+    onPiCommentChange('')
+    onSendReply()
+  }
+
+  const piDecisionBlock = (
+    <>
+      {status === 'approved' && (
+        <div className="flex items-center gap-2 text-[12px] font-medium text-sage-700">
+          <span className="w-4 h-4 rounded-full bg-sage-600 text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">✓</span>
+          Approved by Dr. Faisal Hossain · just now
+        </div>
+      )}
+      {status === 'changes_requested' && (
+        <div className="flex items-center gap-2 text-[12px] font-medium text-red">
+          <span className="w-4 h-4 rounded-full bg-red text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">!</span>
+          Changes requested · just now
+        </div>
+      )}
+    </>
+  )
+
+  const piCommentBlock = status === 'approved'
+    ? <div className="bg-surf2 rounded-lg px-3 py-2.5 space-y-1">
+        <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
+        <p className="text-[12px] text-ink leading-relaxed">Looks good overall. Grad RA salary and tuition numbers match what I expected. Approved.</p>
+      </div>
+    : <div className="bg-red-50 border border-red/20 rounded-lg px-3 py-2.5 space-y-1">
+        <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
+        <p className="text-[12px] text-ink leading-relaxed">Please revisit the international travel line — we're removing that for Period 1. Also confirm the Grad RA count; I think we only need one for this period.</p>
+      </div>
+
   return (
     <aside className="w-[320px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
       {/* Header */}
@@ -839,7 +884,7 @@ function PIReviewPanel({
 
       <div className="flex-1 overflow-auto p-4 space-y-5 text-[12px]">
 
-        {/* Status */}
+        {/* Status pill */}
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Status</div>
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${cfg.pill}`}>
@@ -870,87 +915,75 @@ function PIReviewPanel({
         <div className="border-t border-bdLt" />
 
         {/* Awaiting — simulate PI response for demo */}
-        {status === 'sent' && (
+        {status === 'sent' && replies.length === 0 && (
           <div className="space-y-2">
             <p className="text-[11px] text-mute leading-relaxed">Waiting for Dr. Hossain to respond. Simulate a PI decision below.</p>
-            <button
-              onClick={() => onSimulateDecision('approved')}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surf2 border border-bd rounded-lg text-[12px] font-medium text-ink hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
-            >
+            <button onClick={() => onSimulateDecision('approved')}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surf2 border border-bd rounded-lg text-[12px] font-medium text-ink hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
               <span aria-hidden className="text-sm">↻</span> Refresh status
             </button>
-            <button
-              onClick={() => onSimulateDecision('changes_requested')}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-bd rounded-lg text-[11px] text-mute hover:bg-surf2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
-            >
+            <button onClick={() => onSimulateDecision('changes_requested')}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-bd rounded-lg text-[11px] text-mute hover:bg-surf2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
               Simulate: PI requests changes
             </button>
           </div>
         )}
 
-        {/* Approved */}
-        {status === 'approved' && (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Decision</div>
-              <div className="flex items-center gap-2 text-[12px] font-medium text-sage-700">
-                <span className="w-4 h-4 rounded-full bg-sage-600 text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">✓</span>
-                Approved by Dr. Faisal Hossain · just now
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Comment</div>
-              <div className="bg-surf2 rounded-lg px-3 py-2.5 space-y-1">
-                <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
-                <p className="text-[12px] text-ink leading-relaxed">Looks good overall. Grad RA salary and tuition numbers match what I expected. Approved.</p>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Your reply</div>
-              <textarea
-                value={piComment}
-                onChange={e => onPiCommentChange(e.target.value)}
-                placeholder="Reply to Dr. Hossain…"
-                rows={3}
-                className="w-full px-3 py-2 text-[12px] border border-bd rounded-lg resize-none focus:outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20"
-              />
-            </div>
-          </div>
+        {/* Reply sent — back to awaiting */}
+        {status === 'sent' && replies.length > 0 && (
+          <p className="text-[11px] text-mute leading-relaxed">Reply sent. Waiting for Dr. Hossain to respond.</p>
         )}
 
-        {/* Changes requested */}
-        {status === 'changes_requested' && (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Decision</div>
-              <div className="flex items-center gap-2 text-[12px] font-medium text-red">
-                <span className="w-4 h-4 rounded-full bg-red text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0">!</span>
-                Changes requested by Dr. Faisal Hossain · just now
+        {/* PI responded — decision + comment thread */}
+        {(status === 'approved' || status === 'changes_requested') && (
+          <div className="space-y-3">
+            <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Conversation</div>
+
+            {/* PI decision */}
+            {piDecisionBlock}
+
+            {/* PI comment bubble */}
+            {piCommentBlock}
+
+            {/* GM replies in thread */}
+            {replies.map((r, i) => (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[85%] bg-sage-600 text-white rounded-xl rounded-br-sm px-3 py-2 space-y-0.5">
+                  <div className="text-[10px] text-sage-200">You · {r.time}</div>
+                  <p className="text-[12px] leading-relaxed">{r.text}</p>
+                </div>
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">PI Comment</div>
-              <div className="bg-red-50 border border-red/20 rounded-lg px-3 py-2.5 space-y-1">
-                <div className="text-[11px] text-mute">Dr. Faisal Hossain · just now</div>
-                <p className="text-[12px] text-ink leading-relaxed">Please revisit the international travel line — we're removing that for Period 1. Also confirm the Grad RA count; I think we only need one for this period.</p>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-sub font-semibold">Your reply</div>
-              <textarea
-                value={piComment}
-                onChange={e => onPiCommentChange(e.target.value)}
-                placeholder="Reply to Dr. Hossain…"
-                rows={3}
-                className="w-full px-3 py-2 text-[12px] border border-bd rounded-lg resize-none focus:outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20"
-              />
-            </div>
+            ))}
           </div>
         )}
       </div>
 
+      {/* Reply composer — pinned to bottom when PI has responded */}
+      {(status === 'approved' || status === 'changes_requested') && (
+        <div className="border-t border-bdLt p-3 space-y-2">
+          <textarea
+            value={piComment}
+            onChange={e => onPiCommentChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend() }}
+            placeholder="Reply to Dr. Hossain…"
+            rows={2}
+            className="w-full px-3 py-2 text-[12px] border border-bd rounded-lg resize-none focus:outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-sub">⌘↵ to send</span>
+            <button
+              onClick={handleSend}
+              disabled={!piComment.trim()}
+              className="px-3 py-1.5 bg-sage-600 text-white rounded-lg text-[12px] font-semibold hover:bg-sage-700 disabled:opacity-40 disabled:cursor-not-allowed transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 flex items-center gap-1.5"
+            >
+              Send <span aria-hidden>↑</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="border-t border-bdLt px-4 py-2.5 text-[11px] text-sub">
+      <div className="border-t border-bdLt px-4 py-2 text-[11px] text-sub">
         Budget draft B161463 · Period 1 of 5
       </div>
     </aside>
