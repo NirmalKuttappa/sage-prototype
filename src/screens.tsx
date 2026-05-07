@@ -861,6 +861,8 @@ function PIReviewPanel({
   }
   const cfg = statusConfig[status] ?? idleCfg
 
+  const [replies, setReplies] = useState<{ text: string; time: string }[]>([])
+
   function handleSend() {
     if (!piComment.trim()) return
     setReplies(prev => [...prev, {
