@@ -162,7 +162,7 @@ export function WorkspaceScreen(props: Nav) {
     go, goAwards, toast, aiOn, setAiOn,
     issues, setIssues, rows, setRows,
     proposedTotal, setProposedTotal,
-    noaUploaded, reconciliationActive, egc1Submitted, setEgc1Submitted,
+    reconciliationActive, egc1Submitted, setEgc1Submitted,
   } = props
   const [selectedRow, setSelectedRow] = useState<string | null>(null)
   const [pdfOpen, setPdfOpen] = useState(false)
@@ -544,7 +544,6 @@ export function WorkspaceScreen(props: Nav) {
             row={rows.find(r => r.id === selectedRow)}
             allRows={rows}
             pdfOpen={pdfOpen}
-            aiOn={aiOn}
             onClose={() => setAddinOpen(false)}
             toast={toast}
           />
@@ -654,8 +653,8 @@ function formulaFor(id: string | null, rows: WorkspaceRow[]): string {
 // SAGE ADD-IN — context panel for selected row
 // =====================================================================
 
-function SageAddIn({ row, allRows, pdfOpen, aiOn, onClose, toast }: {
-  row?: WorkspaceRow; allRows: WorkspaceRow[]; pdfOpen: boolean; aiOn: boolean;
+function SageAddIn({ row, allRows, pdfOpen, onClose, toast }: {
+  row?: WorkspaceRow; allRows: WorkspaceRow[]; pdfOpen: boolean;
   onClose: () => void; toast: (m: string) => void;
 }) {
   if (!row) return null
