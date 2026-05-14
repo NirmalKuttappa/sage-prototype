@@ -18,7 +18,7 @@ export default function App() {
   const [awardsStep, setAwardsStep] = useState<AwardsStep>('noa')
   const [toastMsg, setToastMsg] = useState('')
   const [toastOn, setToastOn] = useState(false)
-  const [aiOn, setAiOn] = useState(true)
+  const [aiOn, setAiOn] = useState(false)
 
   // Cross-tab shared state
   const [issues, setIssues] = useState<Issue[]>([]) // empty until reconciliation activates
@@ -27,6 +27,7 @@ export default function App() {
   const [noaUploaded, setNoaUploaded] = useState(false)
   const [reconciliationActive, setReconciliationActive] = useState(false)
   const [egc1Submitted, setEgc1Submitted] = useState(false)
+  const [asrSubmitCount, setAsrSubmitCount] = useState(0)
 
   function go(t: TabKey) {
     setTab(t)
@@ -53,6 +54,7 @@ export default function App() {
     reconciliationActive, setReconciliationActive,
     egc1Submitted, setEgc1Submitted,
     awardsStep, setAwardsStep,
+    asrSubmitCount, setAsrSubmitCount,
   }
 
   return (

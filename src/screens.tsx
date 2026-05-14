@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Button, Pill, ConfidenceChip, SourceTag,
   AIDisclaimer, AIToggle, Header, Footer,
@@ -132,6 +132,7 @@ export type Nav = {
   reconciliationActive: boolean; setReconciliationActive: (v: boolean) => void;
   egc1Submitted: boolean; setEgc1Submitted: (v: boolean) => void;
   awardsStep: AwardsStep; setAwardsStep: (s: AwardsStep) => void;
+  asrSubmitCount: number; setAsrSubmitCount: (v: number) => void;
 }
 
 // =====================================================================
@@ -171,6 +172,8 @@ export function WorkspaceScreen(props: Nav) {
   const [piReviewOpen, setPiReviewOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [piReviewStatus, setPiReviewStatus] = useState<'idle'|'sent'|'approved'|'changes_requested'>('idle')
+  const [personnelPanelRowId, setPersonnelPanelRowId] = useState<string | null>(null)
+  const [aiBannerDismissed, setAiBannerDismissed] = useState(false)
   const [piComment, setPiComment] = useState('')
   const [proposedDraft, setProposedDraft] = useState('')
 
@@ -197,6 +200,37 @@ export function WorkspaceScreen(props: Nav) {
   function updateRow(id: string, patch: Partial<WorkspaceRow>) {
     setRows(rows.map(r => r.id === id ? { ...r, ...patch } : r))
   }
+
+  // Auto-populate empty fields when AI assist is turned on
+  useEffect(() => {
+    if (aiOn) {
+      const anyEmpty = rows.some(r => !r.label && !r.monthlySalary && !r.amount)
+      if (anyEmpty) {
+        setRows(rows.map(r => {
+          const prefill = AI_PREFILL.find(p => p.id === r.id)
+          if (!prefill) return r
+          return {
+            ...r,
+            label:             r.label             || prefill.label,
+            role:              r.role              || prefill.role,
+            monthlySalary:     r.monthlySalary     || prefill.monthlySalary,
+            effortPct:         r.effortPct         || prefill.effortPct,
+            months:            r.months            || prefill.months,
+            amount:            r.amount            || prefill.amount,
+            fringeRate:        r.fringeRate        || prefill.fringeRate,
+            tuitionPerQuarter: r.tuitionPerQuarter || prefill.tuitionPerQuarter,
+            numStudents:       r.numStudents       || prefill.numStudents,
+          }
+        }))
+        if (proposedTotal === 0) {
+          setProposedTotal(265000)
+          setProposedDraft('265000')
+        }
+        toast('AI assist on — empty fields auto-filled from similar proposals.')
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiOn])
 
   function sendForPiReview() {
     setPiReviewOpen(true); setAddinOpen(false); setMismatchView(false)
@@ -245,7 +279,7 @@ export function WorkspaceScreen(props: Nav) {
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
       <Breadcrumb trail={[
         { label: 'Workspace', onClick: () => {} },
-        { label: 'Eye Conditions Evaluation · A224134' },
+        { label: 'Test 1 · A224134' },
       ]} />
 
       {/* Reconciliation gate banner (only when active) */}
@@ -259,7 +293,7 @@ export function WorkspaceScreen(props: Nav) {
       )}
 
       <Header
-        title={isFilled ? 'Eye Conditions Evaluation — Budget Draft' : 'New Budget Workspace · A224134'}
+        title={isFilled ? 'Test 1 — Budget Draft' : 'New Budget Workspace · A224134'}
         idChip={reconciliationActive ? 'Post-award · reconciling' : 'Pre-award draft'}
         status={hasTarget ? `· target $${target.toLocaleString()}` : '· no target set'}
         totals={[
@@ -306,8 +340,29 @@ export function WorkspaceScreen(props: Nav) {
           </button>
         )}
         <div className="flex-1" />
-        <AIToggle on={aiOn} onChange={setAiOn} derivedCount={isFilled ? 4 : 0} />
       </div>
+
+      {/* AI Assist nudge banner */}
+      {!aiOn && !aiBannerDismissed && (
+        <div className="bg-purple-50 border-b border-purple-200 px-6 py-2.5 flex items-center gap-3 text-[12px]">
+          <span className="text-purple-600">✦</span>
+          <div className="flex-1 text-purple-700">
+            <span className="font-medium">AI Assist is off.</span>
+            <span className="ml-1">Turn it on to auto-populate budget fields from similar past proposals.</span>
+          </div>
+          <button
+            onClick={() => setAiOn(true)}
+            className="shrink-0 px-3 py-1 rounded-md bg-purple-700 text-white text-[11px] font-semibold hover:bg-purple-800 transition">
+            Turn on AI Assist
+          </button>
+          <button
+            onClick={() => setAiBannerDismissed(true)}
+            className="shrink-0 text-purple-400 hover:text-purple-600 text-[16px] leading-none ml-1 transition"
+            aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Workspace body */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -417,12 +472,13 @@ export function WorkspaceScreen(props: Nav) {
                           {r.category === 'fringe' || r.category === 'fa' ? (
                             <span className="text-ink">{r.label}</span>
                           ) : (
-                            <input
+                            <AISuggestInput
                               value={r.label}
-                              onChange={e => updateRow(r.id, { label: e.target.value })}
+                              onChange={v => updateRow(r.id, { label: v })}
                               onClick={e => e.stopPropagation()}
                               placeholder={r.category === 'personnel' ? 'Name…' : 'Item…'}
-                              className="w-full bg-transparent text-[12px] outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500"
+                              suggestions={AI_LABEL_SUGGESTIONS[r.category] || []}
+                              aiOn={aiOn}
                             />
                           )}
                         </div>
@@ -431,13 +487,34 @@ export function WorkspaceScreen(props: Nav) {
                         <div className="px-2 border-r border-bdLt flex items-center">
                           {r.category === 'fringe' || r.category === 'fa' ? (
                             <span className="text-mute text-[11px]">{r.role}</span>
-                          ) : (
-                            <input
+                          ) : r.category === 'personnel' ? (
+                            <select
                               value={r.role}
-                              onChange={e => updateRow(r.id, { role: e.target.value })}
+                              onChange={e => {
+                                updateRow(r.id, { role: e.target.value })
+                                if (e.target.value) {
+                                  setPersonnelPanelRowId(r.id)
+                                  setAddinOpen(false)
+                                  setPiReviewOpen(false)
+                                }
+                              }}
                               onClick={e => e.stopPropagation()}
-                              placeholder={r.category === 'personnel' ? 'Title…' : 'Description…'}
-                              className="w-full bg-transparent text-[12px] outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500"
+                              className="w-full bg-transparent text-[12px] outline-none cursor-pointer focus:ring-1 focus:ring-sage-500 rounded"
+                            >
+                              <option value="">Select role…</option>
+                              <option value="PI">PI</option>
+                              <option value="Grad RA · PhD · Sch 1">Grad RA · PhD</option>
+                              <option value="Grad RA · Master's · Sch 1">Grad RA · Master's</option>
+                              <option value="Undergrad RA · Bachelor">Bachelor</option>
+                            </select>
+                          ) : (
+                            <AISuggestInput
+                              value={r.role}
+                              onChange={v => updateRow(r.id, { role: v })}
+                              onClick={e => e.stopPropagation()}
+                              placeholder="Description…"
+                              suggestions={AI_ROLE_SUGGESTIONS[r.category] || []}
+                              aiOn={aiOn}
                             />
                           )}
                         </div>
@@ -445,26 +522,26 @@ export function WorkspaceScreen(props: Nav) {
                         {/* Salary / Rate / Amount */}
                         <div className="px-2 border-r border-bdLt flex items-center justify-end tabular-nums">
                           {r.category === 'personnel' && (
-                            <NumInput value={r.monthlySalary} onChange={v => updateRow(r.id, { monthlySalary: v })} prefix="$" placeholder="/mo" />
+                            <NumSuggestInput value={r.monthlySalary} onChange={v => updateRow(r.id, { monthlySalary: v })} prefix="$" placeholder="/mo" suggestions={AI_SALARY_SUGGESTIONS[r.id]} aiOn={aiOn} />
                           )}
                           {r.category === 'fringe' && (
-                            <NumInput value={r.fringeRate} onChange={v => updateRow(r.id, { fringeRate: v })} suffix="%" placeholder="rate" />
+                            <NumSuggestInput value={r.fringeRate} onChange={v => updateRow(r.id, { fringeRate: v })} suffix="%" placeholder="rate" suggestions={AI_SALARY_SUGGESTIONS['fringe']} aiOn={aiOn} />
                           )}
                           {r.category === 'tuition' && (
-                            <NumInput value={r.tuitionPerQuarter} onChange={v => updateRow(r.id, { tuitionPerQuarter: v })} prefix="$" placeholder="/qtr" />
+                            <NumSuggestInput value={r.tuitionPerQuarter} onChange={v => updateRow(r.id, { tuitionPerQuarter: v })} prefix="$" placeholder="/qtr" suggestions={AI_SALARY_SUGGESTIONS['tuit']} aiOn={aiOn} />
                           )}
                           {r.category === 'fa' && (
                             <span className="text-mute text-[11px]">{r.faRate}%</span>
                           )}
                           {(r.category === 'travel' || r.category === 'supplies' || r.category === 'equipment') && (
-                            <NumInput value={r.amount} onChange={v => updateRow(r.id, { amount: v })} prefix="$" placeholder="amount" />
+                            <NumSuggestInput value={r.amount} onChange={v => updateRow(r.id, { amount: v })} prefix="$" placeholder="amount" suggestions={AI_SALARY_SUGGESTIONS[r.id]} aiOn={aiOn} />
                           )}
                         </div>
 
                         {/* Effort % */}
                         <div className="px-2 border-r border-bdLt flex items-center justify-end tabular-nums">
                           {r.category === 'personnel' && (
-                            <NumInput value={r.effortPct} onChange={v => updateRow(r.id, { effortPct: v })} suffix="%" placeholder="—" />
+                            <NumSuggestInput value={r.effortPct} onChange={v => updateRow(r.id, { effortPct: v })} suffix="%" placeholder="—" suggestions={AI_EFFORT_SUGGESTIONS[r.id]} aiOn={aiOn} />
                           )}
                           {r.category === 'tuition' && (
                             <NumInput value={r.numStudents} onChange={v => updateRow(r.id, { numStudents: v })} placeholder="# stu" />
@@ -474,7 +551,7 @@ export function WorkspaceScreen(props: Nav) {
                         {/* Months */}
                         <div className="px-2 border-r border-bdLt flex items-center justify-end tabular-nums">
                           {(r.category === 'personnel' || r.category === 'tuition') && (
-                            <NumInput value={r.months} onChange={v => updateRow(r.id, { months: v })} placeholder="—" />
+                            <NumSuggestInput value={r.months} onChange={v => updateRow(r.id, { months: v })} placeholder="—" suggestions={AI_MONTHS_SUGGESTIONS[r.id]} aiOn={aiOn} />
                           )}
                         </div>
 
@@ -519,6 +596,18 @@ export function WorkspaceScreen(props: Nav) {
         </div>
 
         {/* Right panel */}
+        {personnelPanelRowId && !piReviewOpen && (() => {
+          const r = rows.find(x => x.id === personnelPanelRowId)
+          if (!r) return null
+          return (
+            <PersonnelDetailPanel
+              row={r}
+              subtotal={computeSubtotal(r, rows)}
+              onSave={patch => { updateRow(r.id, patch); setPersonnelPanelRowId(null) }}
+              onClose={() => setPersonnelPanelRowId(null)}
+            />
+          )
+        })()}
         {piReviewOpen && (
           <PIReviewPanel
             status={piReviewStatus}
@@ -558,10 +647,21 @@ export function WorkspaceScreen(props: Nav) {
             icon={<PaperclipIcon />} />
           <FloatingBtn tooltip="Validate" onClick={runValidate} icon={<CheckIcon />} />
           <FloatingBtn tooltip="Send to PI for review" onClick={sendForPiReview} icon={<SendReviewIcon />} label="PI Review" />
+          <FloatingBtn
+            primary={aiOn}
+            tooltip={aiOn ? 'AI Assist — ON' : 'AI Assist — OFF'}
+            onClick={() => setAiOn(!aiOn)}
+            icon={<span>✦</span>}
+            label="AI Assist"
+          />
           <span className="w-px h-6 bg-bd mx-1 shrink-0" aria-hidden />
           {!egc1Submitted ? (
-            <button onClick={() => { setEgc1Submitted(true); toast('eGC1 auto-populated from Workspace.'); go('egc1') }}
-              className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full bg-sage-600 text-white text-[12px] font-semibold whitespace-nowrap leading-none hover:bg-sage-700 transition shrink-0">
+            <button onClick={() => { toast('eGC1 auto-populated from Workspace.'); go('egc1') }}
+              className={`inline-flex items-center gap-1.5 px-3.5 h-9 rounded-full text-[12px] font-semibold whitespace-nowrap leading-none transition shrink-0 ${
+                isFilled
+                  ? 'bg-sage-600 text-white hover:bg-sage-700'
+                  : 'bg-white text-sage-700 border border-sage-600 hover:bg-sage-50'
+              }`}>
               Populate eGC1 <span aria-hidden>→</span>
             </button>
           ) : reconciliationActive ? (
@@ -612,6 +712,150 @@ export function WorkspaceScreen(props: Nav) {
       </Modal>
 
       <Footer summary={hasTarget ? `Sum: $${totals.total.toLocaleString()}  ·  Target: $${target.toLocaleString()}` : `Sum: $${totals.total.toLocaleString()}`} />
+    </div>
+  )
+}
+
+// =====================================================================
+// AI SUGGESTION DATA
+// =====================================================================
+
+const AI_LABEL_SUGGESTIONS: Record<string, string[]> = {
+  personnel: ['Harry Potter', 'Alastor Moody', 'Remus Lupin', 'Minerva McGonagall', 'Hermione Granger', 'Neville Longbottom', 'Draco Malfoy', 'Luna Lovegood'],
+  travel:    ['ARVO Annual Meeting', 'AGU Conference', 'NIH Review Meeting', 'APHA Annual Meeting', 'International Conference · TBD', 'Gordon Research Conference'],
+  supplies:  ['Lab supplies', 'Research consumables', 'Reagents and chemicals', 'Clinical trial materials', 'Office supplies', 'Protective equipment'],
+  equipment: ['OCT Imaging Module', 'Heidelberg SPECTRALIS', 'Confocal Microscope', 'Computing hardware', 'Software license · MATLAB', 'Centrifuge'],
+  tuition:   ['Grad RA tuition · OPB FY24', 'Graduate student tuition', 'RA tuition remission'],
+}
+
+const AI_ROLE_SUGGESTIONS: Record<string, string[]> = {
+  personnel: ['Contact PI · OD', 'Multi-PI · OD', 'Multi-PI · MD', 'Multi-PI · PhD', 'Grad RA · PhD · Sch 1', "Grad RA · Master's · Sch 1", 'Postdoc Sch 1', 'Research Scientist', 'Lab Manager', 'Co-Investigator'],
+  travel:    ['1 PI · 4 nights', '2 attendees · 3 nights', 'Conference registration + travel', 'International · 7 nights', 'Domestic · 2 nights'],
+  supplies:  ['Vision lab consumables', 'Annual lab supply budget', 'Clinical trial supplies', 'Molecular biology reagents'],
+  equipment: ['Heidelberg SPECTRALIS', 'Research imaging device', 'Shared lab instrument', 'Leased equipment'],
+  tuition:   ['2 students · 3 quarters · OPB FY24', '1 student · 3 quarters', '2 students · 2 quarters', '3 students · 3 quarters'],
+}
+
+const AI_SALARY_SUGGESTIONS: Record<string, number[]> = {
+  pi1:    [16826, 18200, 15400, 21867],
+  pi2:    [16822, 18000, 14900],
+  pi3:    [16822, 17500, 15200],
+  pi4:    [21867, 19500, 23000],
+  ra1:    [7242,  6438,  7800],
+  ra2:    [6438,  7242,  5900],
+  fringe: [27, 22.7, 30],
+  travel: [3281, 4500, 2800, 5200],
+  sup:    [5000, 6500, 3200, 8000],
+  eq:     [5000, 7500, 12000, 3200],
+  tuit:   [7257, 6800, 7900],
+}
+
+const AI_EFFORT_SUGGESTIONS: Record<string, number[]> = {
+  pi1: [10, 5, 15, 20],
+  pi2: [5, 10, 15],
+  pi3: [5, 10, 15],
+  pi4: [5, 10, 15],
+  ra1: [50, 25, 75, 100],
+  ra2: [50, 25, 75, 100],
+}
+
+const AI_MONTHS_SUGGESTIONS: Record<string, number[]> = {
+  pi1:  [9, 12, 6],
+  pi2:  [9, 12, 6],
+  pi3:  [9, 12, 6],
+  pi4:  [9, 12, 6],
+  ra1:  [9, 12, 6],
+  ra2:  [9, 12, 6],
+  tuit: [9, 12, 6, 3],
+}
+
+// =====================================================================
+// AI SUGGEST INPUT — text field with inline AI suggestion dropdown
+// =====================================================================
+
+function AISuggestInput({ value, onChange, onClick, placeholder, suggestions, aiOn }: {
+  value: string;
+  onChange: (v: string) => void;
+  onClick?: (e: React.MouseEvent) => void;
+  placeholder?: string;
+  suggestions: string[];
+  aiOn: boolean;
+}) {
+  const [focused, setFocused] = useState(false)
+  const filtered = suggestions
+    .filter(s => value.length === 0 || s.toLowerCase().includes(value.toLowerCase()))
+    .slice(0, 5)
+  const showDropdown = focused && aiOn && filtered.length > 0
+
+  return (
+    <div className="relative w-full">
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onClick={onClick}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder={placeholder}
+        className="w-full bg-transparent text-[12px] outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500"
+      />
+      {showDropdown && (
+        <div className="absolute top-full left-0 z-50 mt-0.5 bg-white border border-bdLt rounded-lg shadow-xl overflow-hidden min-w-[220px]">
+          <div className="px-2.5 py-1 text-[9px] text-purple-700 uppercase tracking-widest font-semibold bg-purple-100/60 border-b border-bdLt flex items-center gap-1">
+            <span aria-hidden>✦</span> AI suggestions
+          </div>
+          {filtered.map((s, i) => (
+            <button key={i} onMouseDown={() => { onChange(s); setFocused(false) }}
+              className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-sage-50 text-ink border-b border-bdLt last:border-0 transition">
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =====================================================================
+// NUM SUGGEST INPUT — numeric field with AI value suggestions
+// =====================================================================
+
+function NumSuggestInput({ value, onChange, prefix, suffix, placeholder, suggestions, aiOn }: {
+  value?: number; onChange: (v: number) => void;
+  prefix?: string; suffix?: string; placeholder?: string;
+  suggestions?: number[]; aiOn?: boolean;
+}) {
+  const [focused, setFocused] = useState(false)
+  const display = value !== undefined && value !== 0 ? value.toLocaleString() : ''
+  const searchStr = display.replace(/,/g, '')
+  const filtered = (suggestions || []).filter(s => !searchStr || s.toString().includes(searchStr))
+  const showDropdown = focused && aiOn && filtered.length > 0
+
+  return (
+    <div className="relative w-full flex items-center justify-end">
+      {prefix && display && <span className="text-sub text-[11px] mr-0.5">{prefix}</span>}
+      <input
+        value={display}
+        onChange={e => onChange(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+        onClick={e => e.stopPropagation()}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder={placeholder}
+        className="w-full bg-transparent text-[12px] tabular-nums text-right outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500 placeholder:text-sub placeholder:italic placeholder:text-[10px]"
+      />
+      {suffix && display && <span className="text-sub text-[11px] ml-0.5">{suffix}</span>}
+      {showDropdown && (
+        <div className="absolute top-full right-0 z-50 mt-0.5 bg-white border border-bdLt rounded-lg shadow-xl overflow-hidden min-w-[160px]">
+          <div className="px-2.5 py-1 text-[9px] text-purple-700 uppercase tracking-widest font-semibold bg-purple-100/60 border-b border-bdLt flex items-center gap-1">
+            <span aria-hidden>✦</span> AI suggestions
+          </div>
+          {filtered.map((s, i) => (
+            <button key={i} onMouseDown={() => { onChange(s); setFocused(false) }}
+              className="w-full text-right px-3 py-1.5 text-[12px] font-mono hover:bg-sage-50 text-ink border-b border-bdLt last:border-0 transition">
+              {prefix}{s.toLocaleString()}{suffix}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -811,6 +1055,145 @@ function PdfPreviewPanel({ onClose }: { onClose: () => void }) {
 }
 
 // =====================================================================
+// PERSONNEL DETAIL PANEL — role config + UW auto-populated salary data
+// =====================================================================
+
+const PERSONNEL_CONFIGS: Record<string, {
+  positionType: string; schedule: string; level: string; fte: string;
+  monthlySalary: number; annual: number; fringeRate: number;
+  salarySource: string; fringeSource: string;
+}> = {
+  'PI': {
+    positionType: 'Faculty', schedule: '12-month', level: 'Professor', fte: '10%',
+    monthlySalary: 16826, annual: 201912, fringeRate: 27,
+    salarySource: 'Workday, eff. 3/1', fringeSource: 'OMA, FY24',
+  },
+  "Grad RA · PhD · Sch 1": {
+    positionType: 'Grad RA', schedule: '9-month', level: 'PhD', fte: '50%',
+    monthlySalary: 7242, annual: 65178, fringeRate: 10,
+    salarySource: 'Grad School, eff. 9/1', fringeSource: 'OPB, FY24',
+  },
+  "Grad RA · Master's · Sch 1": {
+    positionType: 'Grad RA', schedule: '9-month', level: "Master's", fte: '50%',
+    monthlySalary: 6438, annual: 57942, fringeRate: 10,
+    salarySource: 'Grad School, eff. 9/1', fringeSource: 'OPB, FY24',
+  },
+  'Undergrad RA · Bachelor': {
+    positionType: 'Undergrad RA', schedule: '12-month', level: 'Bachelor', fte: '20%',
+    monthlySalary: 3200, annual: 38400, fringeRate: 5,
+    salarySource: 'Workday estimate', fringeSource: 'OPB, FY24',
+  },
+}
+
+function PersonnelDetailPanel({ row, subtotal, onSave, onClose }: {
+  row: WorkspaceRow; subtotal: number;
+  onSave: (patch: Partial<WorkspaceRow>) => void;
+  onClose: () => void;
+}) {
+  const cfg = PERSONNEL_CONFIGS[row.role] ?? Object.values(PERSONNEL_CONFIGS)[0]
+  const [positionType, setPositionType] = useState(cfg.positionType)
+  const [schedule, setSchedule]         = useState(cfg.schedule)
+  const [level, setLevel]               = useState(cfg.level)
+  const [fte, setFte]                   = useState(cfg.fte)
+  const [monthlySalary, setMonthlySalary] = useState(cfg.monthlySalary)
+  const annual = monthlySalary * 12
+
+  return (
+    <aside className="w-[360px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-3 border-b border-bdLt flex items-start justify-between">
+        <div>
+          <div className="text-[16px] font-bold text-ink">Period 1</div>
+          <div className="text-[24px] font-bold text-ink">${subtotal > 0 ? subtotal.toLocaleString() : monthlySalary.toLocaleString()}</div>
+        </div>
+        <button onClick={onClose} className="text-sub hover:text-ink text-[20px] leading-none mt-1" aria-label="Close">✕</button>
+      </div>
+
+      <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
+        {/* 2x2 dropdown grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'Position Type', value: positionType, set: setPositionType, options: ['Faculty','Grad RA','Undergrad RA','Postdoc','Research Scientist'] },
+            { label: 'Schedule',      value: schedule,     set: setSchedule,     options: ['12-month','9-month','Academic year'] },
+            { label: 'Level',         value: level,        set: setLevel,        options: ['Professor','Associate Professor','Assistant Professor','PhD',"Master's",'Bachelor'] },
+            { label: 'Base FTE',      value: fte,          set: setFte,          options: ['5%','10%','20%','25%','50%','75%','100%'] },
+          ].map(({ label, value, set, options }) => (
+            <div key={label} className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest font-semibold text-sub">{label}</label>
+              <select value={value} onChange={e => set(e.target.value)}
+                className="w-full px-3 py-2.5 border border-bd rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-purple-700/30 focus:border-purple-700 appearance-none">
+                {options.map(o => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        {/* Auto-populated UW card */}
+        <div className="bg-purple-100/40 border border-purple-700/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-purple-700 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+              <span className="text-[13px] font-semibold text-purple-700">Auto-Populated from UW Sources</span>
+            </div>
+            <a href="#" onClick={e => e.preventDefault()} className="text-[11px] text-purple-700 underline underline-offset-2 decoration-dotted whitespace-nowrap">
+              Check website ↗
+            </a>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+            <div>
+              <div className="text-mute text-[11px]">Monthly Salary</div>
+              <div className="font-bold text-ink text-[15px]">${monthlySalary.toLocaleString()}</div>
+              <div className="text-mute text-[10px]">({cfg.salarySource})</div>
+            </div>
+            <div>
+              <div className="text-mute text-[11px]">Annual ({schedule === '9-month' ? '9 mo' : '12 mo'})</div>
+              <div className="font-bold text-ink text-[15px]">${annual.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-mute text-[11px]">Fringe Rate</div>
+              <div className="font-bold text-ink text-[15px]">{cfg.fringeRate}%</div>
+              <div className="text-mute text-[10px]">({cfg.fringeSource})</div>
+            </div>
+          </div>
+
+          <div className="border-t border-purple-700/15 pt-2 flex items-center gap-1.5 text-[11px] text-purple-700">
+            <span>ⓘ</span>
+            <span>Rates effective as of April 2024.</span>
+          </div>
+        </div>
+
+        {/* Editable monthly salary */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] uppercase tracking-widest font-semibold text-sub">Monthly Base Salary</label>
+          <div className="flex items-center border border-bd rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-purple-700/30 focus-within:border-purple-700">
+            <span className="text-sub text-[13px] mr-1">$</span>
+            <input
+              type="text"
+              value={monthlySalary.toLocaleString()}
+              onChange={e => setMonthlySalary(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+              className="flex-1 text-[13px] font-semibold outline-none tabular-nums"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-bdLt px-5 py-4 grid grid-cols-2 gap-3">
+        <button onClick={onClose}
+          className="px-4 py-3 rounded-xl border border-bd text-[13px] font-semibold text-ink hover:bg-surf2 transition">
+          Cancel
+        </button>
+        <button onClick={() => onSave({ monthlySalary, fringeRate: cfg.fringeRate, effortPct: parseFloat(fte) || undefined })}
+          className="px-4 py-3 rounded-xl bg-purple-700 text-white text-[13px] font-semibold hover:bg-purple-800 transition">
+          Save to Budget
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+// =====================================================================
 // PI Review panel
 // =====================================================================
 
@@ -941,7 +1324,7 @@ function SendReviewIcon(){ return <Svg><line x1="22" y1="2" x2="11" y2="13" /><p
 // SCREEN — eGC1 Forms (auto-populated from Workspace)
 // =====================================================================
 
-export function EGC1FormsScreen({ go, toast, rows, egc1Submitted, setEgc1Submitted }: Nav) {
+export function EGC1FormsScreen({ go, goAwards, toast, rows, egc1Submitted, setEgc1Submitted }: Nav) {
   const isFilled = rows.some(r => r.label !== '' || r.amount || r.monthlySalary)
   const totals = totalsOf(rows)
 
@@ -969,7 +1352,7 @@ export function EGC1FormsScreen({ go, toast, rows, egc1Submitted, setEgc1Submitt
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
       <Breadcrumb trail={[
         { label: 'eGC1 Forms', onClick: () => {} },
-        { label: 'A224134 · Eye Conditions Evaluation' },
+        { label: 'A224134 · Test 1' },
         { label: 'Budget & Fiscal Compliance' },
       ]} />
 
@@ -1002,7 +1385,7 @@ export function EGC1FormsScreen({ go, toast, rows, egc1Submitted, setEgc1Submitt
         <div className="flex-1 p-6 max-w-[1100px]">
           <div className="flex items-start justify-between mb-4">
             <h1 className="text-[20px] font-semibold text-sage-700">
-              Eye Conditions Evaluation | <span className="font-normal">A224134</span> | <span className="font-normal">Harry Potter</span>
+              Test 1 | <span className="font-normal">A224134</span> | <span className="font-normal">Harry Potter</span>
             </h1>
           </div>
 
@@ -1023,7 +1406,7 @@ export function EGC1FormsScreen({ go, toast, rows, egc1Submitted, setEgc1Submitt
 
           <h2 className="text-[15px] font-semibold text-sage-700 mb-2">Connect a SAGE Budget</h2>
           <p className="text-[13px] text-sage-700 underline mb-6 cursor-pointer">
-            (B158116) A224134 Eye Conditions Evaluation
+            (B158116) A224134 Test 1
           </p>
 
           <div className="flex items-center justify-between mb-2">
@@ -1086,9 +1469,14 @@ export function EGC1FormsScreen({ go, toast, rows, egc1Submitted, setEgc1Submitt
         <Button variant="ghost" onClick={() => go('workspace')}>← Back to Workspace</Button>
         <div className="flex-1" />
         {egc1Submitted
-          ? <Button variant="secondary" onClick={() => toast('eGC1 already submitted. Waiting on sponsor.')}>
-              ✓ eGC1 submitted — awaiting NoA
-            </Button>
+          ? <>
+              <Button variant="secondary" onClick={() => toast('eGC1 already submitted. Waiting on sponsor.')}>
+                ✓ eGC1 submitted — awaiting NoA
+              </Button>
+              <Button variant="primary" onClick={() => goAwards('noa')} icon={<span>↑</span>}>
+                Upload NoA
+              </Button>
+            </>
           : <Button variant="primary" disabled={!isFilled} onClick={() => { setEgc1Submitted(true); toast('eGC1 submitted to Department › OSP. Awaiting NoA from sponsor.') }} icon={<span>→</span>}>
               Submit eGC1 to Department
             </Button>}
@@ -1113,7 +1501,7 @@ export function AwardsScreen(props: Nav) {
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
       <Breadcrumb trail={[
         { label: 'Awards', onClick: () => {} },
-        { label: 'A224134 · Eye Conditions Evaluation' },
+        { label: 'A224134 · Test 1' },
       ]} />
       <SubTabs<AwardsStep> tabs={subTabs} active={awardsStep} onChange={setAwardsStep} />
       {awardsStep === 'noa'       && <NoaSubStage {...props} />}
@@ -1125,10 +1513,15 @@ export function AwardsScreen(props: Nav) {
 
 function NoaSubStage({ toast, noaUploaded, setNoaUploaded, setAwardsStep, rows }: Nav) {
   const [phase, setPhase] = useState<'empty'|'extracting'|'ready'>(noaUploaded ? 'ready' : 'empty')
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const workspaceSum = totalsOf(rows).total
 
-  function startUpload() {
+  function handleFile(file: File) {
     if (phase !== 'empty') return
+    const sizeKb = Math.round(file.size / 1024)
+    const sizeStr = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`
+    setUploadedFile({ name: file.name, size: sizeStr })
     setPhase('extracting')
     toast('Extracting fields from NoA PDF…')
     setTimeout(() => {
@@ -1138,10 +1531,20 @@ function NoaSubStage({ toast, noaUploaded, setNoaUploaded, setAwardsStep, rows }
     }, 1400)
   }
 
+  function startUpload() {
+    fileInputRef.current?.click()
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
   const extracted = [
     { label: 'FAIN',                 value: 'R34EY000000',               confidence: 'high' as const, source: 'NoA · §12' },
     { label: 'Award Number',         value: '1R34EY000000-01',           confidence: 'high' as const, source: 'NoA · §11' },
-    { label: 'Project Title',        value: 'Eye Conditions Evaluation', confidence: 'high' as const, source: 'NoA · §14' },
+    { label: 'Project Title',        value: 'Test 1', confidence: 'high' as const, source: 'NoA · §14' },
     { label: 'Sponsor',              value: 'NIH · National Eye Institute', confidence: 'high' as const, source: 'NoA cover' },
     { label: 'Federal Award Date',   value: '02/21/2024',                confidence: 'high' as const, source: 'NoA cover' },
     { label: 'Budget Period',        value: '03/01/2024 – 02/28/2025',   confidence: 'high' as const, source: 'NoA · §19' },
@@ -1162,16 +1565,25 @@ function NoaSubStage({ toast, noaUploaded, setNoaUploaded, setAwardsStep, rows }
       <AIDisclaimer />
 
       {phase === 'empty' && (
-        <div onClick={startUpload}
-          className="mt-5 border-2 border-dashed border-bd rounded-xl px-8 py-14 text-center bg-card hover:bg-surf2 cursor-pointer transition">
-          <div className="text-5xl mb-3">📥</div>
-          <div className="text-[15px] font-semibold mb-1">Drop the NoA PDF here</div>
-          <div className="text-[12px] text-mute mb-4">or <span className="text-sage-700 underline">click to browse</span></div>
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-mute">
-            <span>📄</span>
-            <span>Demo: clicks load <code className="text-[10px] bg-surf2 px-1 rounded">NIH-Grants-Process-Primer-Sample-NOA.pdf</code></span>
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xlsx,.xls,*/*"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+          />
+          <div
+            onClick={startUpload}
+            onDrop={onDrop}
+            onDragOver={e => e.preventDefault()}
+            className="mt-5 border-2 border-dashed border-bd rounded-xl px-8 py-14 text-center bg-card hover:bg-surf2 cursor-pointer transition">
+            <div className="text-5xl mb-3">📥</div>
+            <div className="text-[15px] font-semibold mb-1">Drop the NoA file here</div>
+            <div className="text-[12px] text-mute mb-4">or <span className="text-sage-700 underline">click to browse your computer</span></div>
+            <div className="text-[11px] text-mute">Accepts PDF, Word, Excel or any file</div>
           </div>
-        </div>
+        </>
       )}
       {phase === 'extracting' && (
         <div className="mt-5 border border-bdLt rounded-xl px-8 py-10 text-center bg-card">
@@ -1188,8 +1600,8 @@ function NoaSubStage({ toast, noaUploaded, setNoaUploaded, setAwardsStep, rows }
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-2xl">📄</span>
                 <div className="flex-1">
-                  <div className="text-[13px] font-semibold">NIH-Grants-Process-Primer-Sample-NOA.pdf</div>
-                  <div className="text-[11px] text-mute">325 KB · 8 pages</div>
+                  <div className="text-[13px] font-semibold">{uploadedFile?.name ?? 'NIH-Grants-Process-Primer-Sample-NOA.pdf'}</div>
+                  <div className="text-[11px] text-mute">{uploadedFile?.size ?? '325 KB'} · uploaded</div>
                 </div>
                 <span className="px-2 py-0.5 rounded-full bg-sage-100 text-sage-700 text-[10px] font-semibold">OCR ✓</span>
               </div>
@@ -1315,15 +1727,35 @@ function ReconcileSubStage({ go, toast, rows, setIssues, reconciliationActive, s
   )
 }
 
-function AsrSubStage({ go, toast, rows, issues, reconciliationActive }: Nav) {
+function AsrSubStage({ go, toast, rows, issues, reconciliationActive, asrSubmitCount, setAsrSubmitCount }: Nav) {
   const totals = totalsOf(rows)
   const NOA_TOTAL = 267006
   const hasMismatch = issues.length > 0
   const blockSubmit = hasMismatch || !reconciliationActive
   const [piSfiDone, setPiSfiDone] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  function submitAsr() {
+    if (blockSubmit) return
+    setShowSuccess(true)
+    setTimeout(() => {
+      setShowSuccess(false)
+      setAsrSubmitCount(asrSubmitCount + 1)
+      go('budgets')
+    }, 2500)
+  }
 
   return (
     <div className="flex-1 overflow-auto p-8 max-w-[1200px] w-full space-y-5">
+      {showSuccess && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl px-12 py-10 flex flex-col items-center gap-4 max-w-[420px] w-full text-center animate-in fade-in zoom-in duration-200">
+            <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center text-3xl text-sage-700">✓</div>
+            <h2 className="text-[20px] font-semibold">Budget Successfully Submitted</h2>
+            <p className="text-[13px] text-mute leading-relaxed">Your Award Setup Request has been routed to Department › OSP › GCA. Redirecting to Budgets…</p>
+          </div>
+        </div>
+      )}
       <div>
         <h2 className="text-[22px] font-semibold">Award Setup Request (ASR)</h2>
         <p className="text-[13px] text-mute mt-1">Review the field mapping below, then submit the ASR to route to Department › OSP › GCA.</p>
@@ -1397,9 +1829,8 @@ function AsrSubStage({ go, toast, rows, issues, reconciliationActive }: Nav) {
           : <Button variant="secondary" onClick={() => { setTimeout(() => setPiSfiDone(true), 600); toast('SFI reminder sent to Dr. Potter.') }}>
               Send SFI reminder to PI
             </Button>}
-        <Button variant={blockSubmit ? 'disabled' : 'primary'}
-          onClick={() => !blockSubmit && toast('ASR submitted. Routing to Department › OSP › GCA.')}>
-          {hasMismatch ? 'Resolve mismatch first' : piSfiDone ? 'Submit ASR' : 'Submit ASR — waiting for PI SFI'}
+        <Button variant={blockSubmit ? 'disabled' : 'primary'} onClick={submitAsr}>
+          {hasMismatch ? 'Resolve mismatch first' : 'Submit ASR'}
         </Button>
       </StickyCta>
     </div>
@@ -1445,7 +1876,7 @@ export function FilesScreen({ toast, noaUploaded, egc1Submitted }: Nav) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-page">
-      <Breadcrumb trail={[{ label: 'Files' }, { label: 'A224134 · Eye Conditions Evaluation' }]} />
+      <Breadcrumb trail={[{ label: 'Files' }, { label: 'A224134 · Test 1' }]} />
       <div className="p-8 flex-1 overflow-auto max-w-[1100px] w-full">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -1494,9 +1925,20 @@ export function FilesScreen({ toast, noaUploaded, egc1Submitted }: Nav) {
 // SCREEN — Budgets (list view)
 // =====================================================================
 
-export function BudgetsScreen({ go }: Nav) {
-  const rows = [
-    { id: 'B158116', title: 'Eye Conditions Evaluation', sponsor: 'NIH', pi: 'Harry Potter', status: 'Active', total: '$267,006' },
+export function BudgetsScreen({ go, rows: workspaceRows, asrSubmitCount }: Nav) {
+  const piRow = workspaceRows.find(r => r.category === 'personnel' && r.label)
+  const totals = totalsOf(workspaceRows)
+  const submittedEntries = Array.from({ length: asrSubmitCount }, (_, i) => ({
+    id: `B${224134 + i}`,
+    title: `Test ${i + 1}`,
+    sponsor: 'NIH',
+    pi: piRow?.label ?? 'Harry Potter',
+    status: 'Active',
+    total: totals.total > 0 ? `$${totals.total.toLocaleString()}` : '$267,006',
+  }))
+
+  const entries = [
+    ...submittedEntries,
     { id: 'B161463', title: 'NASA Linking Lakes', sponsor: 'NASA', pi: 'Faisal Hossain', status: 'Closed', total: '$298,500' },
     { id: 'B167902', title: 'Glaucoma Cohort Study', sponsor: 'NIH', pi: 'Remus Lupin', status: 'Draft', total: '—' },
   ]
@@ -1506,13 +1948,14 @@ export function BudgetsScreen({ go }: Nav) {
       <div className="p-8 max-w-[1100px] w-full">
         <h2 className="text-[22px] font-semibold mb-1">Budgets</h2>
         <p className="text-[13px] text-mute mb-5">Open the Workspace to draft, refine, or reconcile any budget.</p>
+
         <div className="bg-card border border-bdLt rounded-lg overflow-hidden">
           <div className="bg-surf2 border-b border-bdLt grid grid-cols-[100px_1.5fr_100px_1fr_100px_120px] px-5 py-3 text-[10px] text-sub uppercase tracking-widest font-semibold">
             <span>ID</span><span>Title</span><span>Sponsor</span><span>PI</span><span>Status</span><span className="text-right">Total</span>
           </div>
-          {rows.map(r => (
+          {entries.map((r, i) => (
             <div key={r.id} onClick={() => go('workspace')}
-              className="grid grid-cols-[100px_1.5fr_100px_1fr_100px_120px] px-5 py-3 text-[12px] border-b border-bdLt last:border-b-0 items-center hover:bg-surf2/40 cursor-pointer">
+              className={`grid grid-cols-[100px_1.5fr_100px_1fr_100px_120px] px-5 py-3 text-[12px] border-b border-bdLt last:border-b-0 items-center hover:bg-surf2/40 cursor-pointer ${i === 0 && asrSubmitCount > 0 ? 'bg-sage-50/60' : ''}`}>
               <span className="font-mono text-sage-700">{r.id}</span>
               <span className="font-medium">{r.title}</span>
               <span>{r.sponsor}</span>
