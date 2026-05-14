@@ -14,30 +14,36 @@ export type { Issue } from './ui'
 // TYPES, CONSTANTS, FORMULA ENGINE
 // =====================================================================
 
+export type RowRole = '' | 'PI' | 'Grad-PhD' | 'Grad-Master' | 'Bachelor'
+
 export type WorkspaceRow = {
   id: string;
   cellRef: string;
   category: 'personnel' | 'fringe' | 'travel' | 'supplies' | 'equipment' | 'tuition' | 'fa';
   label: string;
   role: string;
+  roleType?: RowRole;
   monthlySalary?: number;
   effortPct?: number;
   months?: number;
+  inflationRate?: number;
   amount?: number;
   fringeRate?: number;
   numStudents?: number;
   tuitionPerQuarter?: number;
   faRate?: number;
   excludedFromMtdc?: boolean;
+  autoPopulated?: boolean;
+  verified?: boolean;
 }
 
 export const BLANK_ROWS: WorkspaceRow[] = [
-  { id: 'pi1',    cellRef: 'F4',  category: 'personnel', label: '', role: '' },
-  { id: 'pi2',    cellRef: 'F5',  category: 'personnel', label: '', role: '' },
-  { id: 'pi3',    cellRef: 'F6',  category: 'personnel', label: '', role: '' },
-  { id: 'pi4',    cellRef: 'F7',  category: 'personnel', label: '', role: '' },
-  { id: 'ra1',    cellRef: 'F8',  category: 'personnel', label: '', role: '' },
-  { id: 'ra2',    cellRef: 'F9',  category: 'personnel', label: '', role: '' },
+  { id: 'per1',   cellRef: 'F4',  category: 'personnel', label: '', role: '', roleType: '' },
+  { id: 'per2',   cellRef: 'F5',  category: 'personnel', label: '', role: '', roleType: '' },
+  { id: 'per3',   cellRef: 'F6',  category: 'personnel', label: '', role: '', roleType: '' },
+  { id: 'per4',   cellRef: 'F7',  category: 'personnel', label: '', role: '', roleType: '' },
+  { id: 'per5',   cellRef: 'F8',  category: 'personnel', label: '', role: '', roleType: '' },
+  { id: 'per6',   cellRef: 'F9',  category: 'personnel', label: '', role: '', roleType: '' },
   { id: 'fringe', cellRef: 'F10', category: 'fringe',    label: 'Fringe benefits', role: 'Auto · derived from personnel' },
   { id: 'travel', cellRef: 'C11', category: 'travel',    label: '', role: '' },
   { id: 'sup',    cellRef: 'F12', category: 'supplies',  label: '', role: '' },
@@ -47,19 +53,80 @@ export const BLANK_ROWS: WorkspaceRow[] = [
 ]
 
 const AI_PREFILL: WorkspaceRow[] = [
-  { id: 'pi1',    cellRef: 'F4',  category: 'personnel', label: 'Harry Potter',       role: 'Contact PI · OD',           monthlySalary: 16826, effortPct: 10, months: 9 },
-  { id: 'pi2',    cellRef: 'F5',  category: 'personnel', label: 'Alastor Moody',      role: 'Multi-PI · OD',             monthlySalary: 16822, effortPct: 5,  months: 9 },
-  { id: 'pi3',    cellRef: 'F6',  category: 'personnel', label: 'Remus Lupin',        role: 'Multi-PI',                  monthlySalary: 16822, effortPct: 5,  months: 9 },
-  { id: 'pi4',    cellRef: 'F7',  category: 'personnel', label: 'Minerva McGonagall', role: 'Multi-PI · MD',             monthlySalary: 21867, effortPct: 5,  months: 9 },
-  { id: 'ra1',    cellRef: 'F8',  category: 'personnel', label: 'Draco Malfoy',       role: 'Grad RA · PhD · Sch 1',     monthlySalary: 7242,  effortPct: 50, months: 9 },
-  { id: 'ra2',    cellRef: 'F9',  category: 'personnel', label: 'Neville Longbottom', role: "Grad RA · Master's · Sch 1", monthlySalary: 6438, effortPct: 50, months: 9 },
-  { id: 'fringe', cellRef: 'F10', category: 'fringe',    label: 'Fringe benefits',    role: 'Faculty 27% / Grad 10% blended', fringeRate: 22.7 },
+  { id: 'per1',   cellRef: 'F4',  category: 'personnel', label: 'Harry Potter',       role: 'Contact PI · OD',     roleType: 'PI',          monthlySalary: 16826, effortPct: 10, months: 9 },
+  { id: 'per2',   cellRef: 'F5',  category: 'personnel', label: 'Alastor Moody',      role: 'Multi-PI · OD',       roleType: 'PI',          monthlySalary: 16822, effortPct: 5,  months: 9 },
+  { id: 'per3',   cellRef: 'F6',  category: 'personnel', label: 'Remus Lupin',        role: 'Multi-PI',            roleType: 'PI',          monthlySalary: 16822, effortPct: 5,  months: 9 },
+  { id: 'per4',   cellRef: 'F7',  category: 'personnel', label: 'Minerva McGonagall', role: 'Multi-PI · MD',       roleType: 'PI',          monthlySalary: 21867, effortPct: 5,  months: 9 },
+  { id: 'per5',   cellRef: 'F8',  category: 'personnel', label: 'Draco Malfoy',       role: 'Candidate · Sch 1',   roleType: 'Grad-PhD',    monthlySalary: 3621,  effortPct: 50, months: 9 },
+  { id: 'per6',   cellRef: 'F9',  category: 'personnel', label: 'Neville Longbottom', role: "Master's · Sch 1",    roleType: 'Grad-Master', monthlySalary: 3219,  effortPct: 50, months: 9 },
+  { id: 'fringe', cellRef: 'F10', category: 'fringe',    label: 'Fringe benefits',    role: 'Faculty 27% / Grad 18.2% blended', fringeRate: 22.7 },
   { id: 'travel', cellRef: 'C11', category: 'travel',    label: 'ARVO Annual Meeting',role: '1 PI · 4 nights · Seattle', amount: 3281 },
   { id: 'sup',    cellRef: 'F12', category: 'supplies',  label: 'Lab supplies',       role: 'Vision lab consumables',    amount: 5000 },
   { id: 'eq',     cellRef: 'F13', category: 'equipment', label: 'OCT Imaging Module', role: 'Heidelberg SPECTRALIS',     amount: 5000 },
   { id: 'tuit',   cellRef: 'F14', category: 'tuition',   label: 'Grad RA tuition',    role: '2 students · 3 quarters · OPB FY24', tuitionPerQuarter: 7257, numStudents: 2, months: 9, excludedFromMtdc: true },
   { id: 'fa',     cellRef: 'F15', category: 'fa',        label: 'F&A indirect costs', role: 'Auto · 57.5% MTDC',         faRate: 57.5, excludedFromMtdc: true },
 ]
+
+// Role config — drives the right-panel dropdowns and the auto-populated values
+export type RoleConfig = {
+  posType: string;
+  posTypes: string[];
+  sched: string;
+  schedules: string[];
+  level: string;
+  levels: string[];
+  fteLabel: string;
+  ftes: string[];
+  monthlySalary: number;
+  fringeRate: number;
+  tuitionAnnual: number;
+  source: string;
+  sourceUrl: string;
+}
+
+export function roleConfigFor(role: RowRole | undefined): RoleConfig | null {
+  switch (role) {
+    case 'PI':
+      return {
+        posType: 'Faculty', posTypes: ['Faculty', 'Research Faculty', 'Affiliate'],
+        sched: '12-month', schedules: ['12-month', '9-month'],
+        level: 'Professor', levels: ['Professor', 'Associate Professor', 'Assistant Professor', 'Research Professor'],
+        fteLabel: '10%', ftes: ['5%', '10%', '15%', '20%', '25%', '30%'],
+        monthlySalary: 16826, fringeRate: 27.0, tuitionAnnual: 0,
+        source: 'Workday HCM', sourceUrl: 'https://workday.washington.edu',
+      }
+    case 'Grad-PhD':
+      return {
+        posType: 'Graduate RA', posTypes: ['Graduate RA', 'Predoctoral Fellow', 'Trainee'],
+        sched: 'Schedule 1', schedules: ['Schedule 1', 'Schedule 2', 'Schedule 3', 'Schedule 4'],
+        level: 'Candidate (passed quals)', levels: ['Newly admitted', 'Pre-quals', 'Candidate (passed quals)', 'Advanced'],
+        fteLabel: '50%', ftes: ['25%', '50%', '75%'],
+        monthlySalary: 3621, fringeRate: 18.2, tuitionAnnual: 19932,
+        source: 'UW Grad School + OPB', sourceUrl: 'https://facstaff.grad.uw.edu/advising-resources/funding-management/administering-assistantships/ta-ra-salaries/',
+      }
+    case 'Grad-Master':
+      return {
+        posType: 'Graduate RA', posTypes: ['Graduate RA', 'Trainee'],
+        sched: 'Schedule 1', schedules: ['Schedule 1', 'Schedule 2'],
+        level: "Master's", levels: ["Newly admitted", "Master's", 'Advanced'],
+        fteLabel: '50%', ftes: ['25%', '50%', '75%'],
+        monthlySalary: 3219, fringeRate: 18.2, tuitionAnnual: 19932,
+        source: 'UW Grad School + OPB', sourceUrl: 'https://facstaff.grad.uw.edu/advising-resources/funding-management/administering-assistantships/ta-ra-salaries/',
+      }
+    case 'Bachelor':
+      return {
+        posType: 'Hourly Undergrad', posTypes: ['Hourly Undergrad', 'Work-Study'],
+        sched: 'Hourly', schedules: ['Hourly'],
+        level: 'Junior', levels: ['Freshman', 'Sophomore', 'Junior', 'Senior'],
+        fteLabel: '10 hr/wk', ftes: ['5 hr/wk', '10 hr/wk', '15 hr/wk', '20 hr/wk'],
+        monthlySalary: 880, fringeRate: 8.4, tuitionAnnual: 0,
+        source: 'UW Student Employment',
+        sourceUrl: 'https://hr.uw.edu/comp/jobs-and-job-profiles/job-classifications-and-compensation/',
+      }
+    default:
+      return null
+  }
+}
 
 export const INITIAL_ISSUES: Issue[] = [
   {
@@ -73,8 +140,11 @@ export const INITIAL_ISSUES: Issue[] = [
 
 export function computeSubtotal(row: WorkspaceRow, allRows: WorkspaceRow[]): number {
   switch (row.category) {
-    case 'personnel':
-      return Math.round((row.monthlySalary || 0) * ((row.effortPct || 0) / 100) * (row.months || 0))
+    case 'personnel': {
+      const monthly = row.monthlySalary || 0
+      const adjusted = monthly * (1 + (row.inflationRate || 0) / 100)
+      return Math.round(adjusted * ((row.effortPct || 0) / 100) * (row.months || 0))
+    }
     case 'fringe': {
       const personnelTotal = allRows
         .filter(r => r.category === 'personnel')
@@ -109,7 +179,7 @@ function totalsOf(rows: WorkspaceRow[]) {
 }
 
 const SECTIONS = [
-  { title: 'A. Personnel — Salary and Benefits', ids: ['pi1','pi2','pi3','pi4','ra1','ra2','fringe'] },
+  { title: 'A. Personnel — Salary and Benefits', ids: ['per1','per2','per3','per4','per5','per6','fringe'] },
   { title: 'B. Travel',                            ids: ['travel'] },
   { title: 'C. Other Direct Costs',                ids: ['sup','eq'] },
   { title: 'D. Student Aid (Tuition)',             ids: ['tuit'] },
@@ -239,7 +309,56 @@ export function WorkspaceScreen(props: Nav) {
   }
   function confirmUpload() {
     setUploadOpen(false); setPdfOpen(true); setAddinOpen(true); setMismatchView(false); setSelectedRow('eq')
-    toast('Equipment_Invoice_v1.pdf uploaded · linked to OCT Imaging Module row.')
+    // OCR-extract: fill F13 worksheet text from the invoice
+    setRows(rows.map(r => r.id === 'eq' ? {
+      ...r,
+      label: 'OCT Imaging Module',
+      role: 'Heidelberg SPECTRALIS',
+      amount: 5000,
+      autoPopulated: true,
+    } : r))
+    toast('Equipment_Invoice_v1.pdf uploaded · F13 auto-populated from OCR. Approve in panel.')
+  }
+
+  function verifyRow(rowId: string) {
+    const r = rows.find(x => x.id === rowId)
+    if (!r) return
+    // Mark verified + auto-fill similar-role rows
+    const otherPIs = [
+      { label: 'Alastor Moody',      role: 'Multi-PI · OD', monthlySalary: 16822, effortPct: 5, months: 9 },
+      { label: 'Remus Lupin',        role: 'Multi-PI',      monthlySalary: 16822, effortPct: 5, months: 9 },
+      { label: 'Minerva McGonagall', role: 'Multi-PI · MD', monthlySalary: 21867, effortPct: 5, months: 9 },
+    ]
+    const otherGrads = [
+      { label: 'Neville Longbottom', role: "Master's · Sch 1", roleType: 'Grad-Master' as RowRole, monthlySalary: 3219, effortPct: 50, months: 9 },
+    ]
+    let piSlot = 0
+    let gradSlot = 0
+    const next = rows.map(x => {
+      if (x.id === rowId) return { ...x, verified: true, autoPopulated: false }
+      // Auto-fill empty personnel slots with matching role family
+      if (x.category === 'personnel' && !x.label) {
+        if (r.roleType === 'PI' && piSlot < otherPIs.length) {
+          const fill = otherPIs[piSlot++]
+          return { ...x, ...fill, roleType: 'PI' as RowRole, autoPopulated: true, verified: false }
+        }
+        if (r.roleType === 'Grad-PhD' && gradSlot < otherGrads.length) {
+          const fill = otherGrads[gradSlot++]
+          return { ...x, ...fill, autoPopulated: true, verified: false }
+        }
+      }
+      return x
+    })
+    setRows(next)
+    if (r.id === 'eq') {
+      toast(`✓ ${r.label} approved.`)
+    } else if (r.roleType === 'PI' && piSlot > 0) {
+      toast(`✓ ${r.label} verified. Auto-populated ${piSlot} more PI${piSlot > 1 ? 's' : ''} (Moody · Lupin · McGonagall).`)
+    } else if (r.roleType === 'Grad-PhD' && gradSlot > 0) {
+      toast(`✓ ${r.label} verified. Auto-populated 1 Master's RA (Longbottom).`)
+    } else {
+      toast(`✓ ${r.label} verified and saved to budget.`)
+    }
   }
 
   return (
@@ -405,7 +524,11 @@ export function WorkspaceScreen(props: Nav) {
                           else if (r.id === 'fa' && hasIssue) { setAddinOpen(true); setMismatchView(true) }
                         }}
                         className={`grid grid-cols-[40px_minmax(220px,1.4fr)_minmax(150px,1fr)_100px_60px_60px_100px_120px] border-b border-bdLt h-9 text-[12px] cursor-pointer transition ${
-                          hasIssue ? 'bg-red-50/60' : isSel ? 'bg-sage-50' : (r.id === 'eq' && pdfOpen) ? 'bg-yellow-hi' : 'hover:bg-surf2'
+                          hasIssue ? 'bg-red-50/60'
+                          : isSel ? 'bg-sage-50'
+                          : (r.id === 'eq' && pdfOpen) ? 'bg-yellow-hi'
+                          : r.autoPopulated && !r.verified ? 'bg-purple-100/40'
+                          : 'hover:bg-surf2'
                         }`}>
                         <div className={`border-r h-full flex items-center justify-center text-[10px] ${
                           hasIssue ? 'bg-red text-white font-bold border-red'
@@ -429,17 +552,46 @@ export function WorkspaceScreen(props: Nav) {
                         </div>
 
                         {/* Role */}
-                        <div className="px-2 border-r border-bdLt flex items-center">
+                        <div className="px-2 border-r border-bdLt flex items-center gap-1.5">
                           {r.category === 'fringe' || r.category === 'fa' ? (
                             <span className="text-mute text-[11px]">{r.role}</span>
+                          ) : r.category === 'personnel' ? (
+                            <select
+                              value={r.roleType || ''}
+                              onChange={e => {
+                                const newRole = e.target.value as RowRole
+                                const cfg = roleConfigFor(newRole)
+                                updateRow(r.id, {
+                                  roleType: newRole,
+                                  // pre-fill defaults from role config if cells are empty
+                                  monthlySalary: r.monthlySalary || cfg?.monthlySalary,
+                                  effortPct:     r.effortPct     || (cfg ? Number(cfg.fteLabel.replace(/[^0-9]/g, '')) || 50 : undefined),
+                                  months:        r.months        || 9,
+                                  role:          r.role          || (cfg ? `${cfg.posType} · ${cfg.level}` : ''),
+                                })
+                                if (newRole) { setAddinOpen(true); setSelectedRow(r.id) }
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              className={`w-full bg-transparent text-[12px] outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500 ${
+                                r.roleType ? 'text-ink font-medium' : 'text-sub italic'
+                              }`}>
+                              <option value="">Select role…</option>
+                              <option value="PI">PI</option>
+                              <option value="Grad-PhD">Grad-PhD</option>
+                              <option value="Grad-Master">Grad-Master</option>
+                              <option value="Bachelor">Bachelor</option>
+                            </select>
                           ) : (
                             <input
                               value={r.role}
                               onChange={e => updateRow(r.id, { role: e.target.value })}
                               onClick={e => e.stopPropagation()}
-                              placeholder={r.category === 'personnel' ? 'Title…' : 'Description…'}
+                              placeholder="Description…"
                               className="w-full bg-transparent text-[12px] outline-none focus:bg-white focus:px-1 focus:rounded focus:ring-1 focus:ring-sage-500"
                             />
+                          )}
+                          {r.autoPopulated && !r.verified && (
+                            <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700 shrink-0">✦ AI</span>
                           )}
                         </div>
 
@@ -540,15 +692,32 @@ export function WorkspaceScreen(props: Nav) {
             onClose={() => setMismatchView(false)}
           />
         )}
-        {addinOpen && !mismatchView && !piReviewOpen && selectedRow && (
-          <SageAddIn
-            row={rows.find(r => r.id === selectedRow)}
-            allRows={rows}
-            pdfOpen={pdfOpen}
-            onClose={() => setAddinOpen(false)}
-            toast={toast}
-          />
-        )}
+        {addinOpen && !mismatchView && !piReviewOpen && selectedRow && (() => {
+          const row = rows.find(r => r.id === selectedRow)
+          if (!row) return null
+          if (row.category === 'personnel') {
+            return (
+              <PersonnelPanel
+                row={row}
+                allRows={rows}
+                period={1}
+                onUpdate={updateRow}
+                onVerify={verifyRow}
+                onClose={() => setAddinOpen(false)}
+              />
+            )
+          }
+          return (
+            <SageAddIn
+              row={row}
+              allRows={rows}
+              pdfOpen={pdfOpen}
+              onClose={() => setAddinOpen(false)}
+              onVerify={verifyRow}
+              toast={toast}
+            />
+          )
+        })()}
 
         {/* Floating action bar */}
         <FloatingActionBar>
@@ -654,9 +823,9 @@ function formulaFor(id: string | null, rows: WorkspaceRow[]): string {
 // SAGE ADD-IN — context panel for selected row
 // =====================================================================
 
-function SageAddIn({ row, allRows, pdfOpen, onClose, toast }: {
+function SageAddIn({ row, allRows, pdfOpen, onClose, onVerify, toast }: {
   row?: WorkspaceRow; allRows: WorkspaceRow[]; pdfOpen: boolean;
-  onClose: () => void; toast: (m: string) => void;
+  onClose: () => void; onVerify: (id: string) => void; toast: (m: string) => void;
 }) {
   if (!row) return null
   const sub = computeSubtotal(row, allRows)
@@ -679,85 +848,42 @@ function SageAddIn({ row, allRows, pdfOpen, onClose, toast }: {
               </div>
               <span className="text-amber-700 font-bold">↗</span>
             </div>
+
+            {row.autoPopulated && !row.verified && (
+              <div className="bg-purple-100/50 border border-purple-700/30 rounded-md px-3 py-2.5 space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-semibold text-purple-700">
+                  <span>✦</span> AI Auto-populated from OCR
+                </div>
+                <p className="text-[11px] text-purple-700 leading-relaxed">F13 cell text was filled from the invoice. Review the values below and click <b>Approve</b>, or edit the cell directly to correct.</p>
+              </div>
+            )}
+
             <Stat k="Vendor" v="Heidelberg Engineering Inc." sub="10 Forge Parkway, Franklin MA" />
             <Stat k="Item" v="SPECTRALIS OCT Imaging Module" />
             <Stat k="Quoted amount" v="$5,000.00" sub="Per invoice line 1" />
+            <Stat k="SAGE object code" v="05-00 Supplies" sub="Suggested by AI" />
+
+            {row.autoPopulated && !row.verified && (
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => { toast('Edit the F13 cell to correct the auto-populated values.') }}
+                  className="flex-1 px-3 py-2 border border-bd rounded-lg text-[12px] font-medium hover:bg-surf2">
+                  Correct
+                </button>
+                <button onClick={() => onVerify(row.id)}
+                  className="flex-1 px-3 py-2 bg-purple-700 text-white rounded-lg text-[12px] font-semibold hover:opacity-90">
+                  Approve
+                </button>
+              </div>
+            )}
+            {row.verified && (
+              <div className="bg-sage-50 border border-sage-500 rounded-md px-3 py-2 inline-flex items-center gap-1.5 text-[11px] text-sage-700 font-semibold">
+                <span>✓</span> Approved — saved to budget
+              </div>
+            )}
           </>
         )}
 
-        {row.category === 'personnel' && row.id.startsWith('ra') && (
-          <>
-            <div>
-              <h3 className="text-[14px] font-semibold">{row.label || 'Grad RA'} — {row.cellRef}</h3>
-              <div className="text-[10px] text-sub uppercase tracking-widest font-semibold mt-3 mb-1">Salary schedule</div>
-              <select className="w-full px-3 py-2 text-[12px] border border-bd rounded-md focus:outline-none focus:border-sage-500">
-                <option>Sch 1 — Doctoral RA (PhD)</option>
-                <option>Sch 1 — Master&apos;s RA</option>
-                <option>Sch 2 — Predoctoral Fellow</option>
-                <option>Sch 3 — Variable Rate</option>
-                <option>Sch 4 — Fixed Rate</option>
-              </select>
-              <div className="text-[10px] text-mute mt-1">Schedule drives the monthly salary applied to this row.</div>
-            </div>
-            <Stat k="Monthly Salary" v={row.monthlySalary ? `$${row.monthlySalary.toLocaleString()} / month` : '—'} sub="Grad School, eff. 3/1/2024" confidence="high" source="UW Grad School rate table" />
-            <Stat k="FTE / Period" v={`${row.effortPct || 0}% FTE × ${row.months || 0} months`} />
-            <Stat k="Subtotal (computed)" v={`$${sub.toLocaleString()}`} confidence="high" source="Live formula" />
-
-            {/* Live UW rate sources */}
-            <div className="border border-sage-500/40 bg-sage-50/60 rounded-md p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-widest text-sage-700 font-semibold inline-flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sage-500 animate-pulse" aria-hidden /> Live UW rate sources
-                </span>
-                <button onClick={() => toast('Rates refreshed from UW Grad School and OPB.')} className="text-[10px] text-sage-700 underline">Refresh</button>
-              </div>
-              <a href="https://facstaff.grad.uw.edu/advising-resources/funding-management/administering-assistantships/ta-ra-salaries/"
-                target="_blank" rel="noopener noreferrer"
-                className="block bg-white border border-bdLt rounded px-2.5 py-2 hover:border-sage-500 transition">
-                <div className="text-[11px] font-semibold text-ink">UW Grad School · TA/RA salaries</div>
-                <div className="text-[10px] text-mute mt-0.5 truncate">facstaff.grad.uw.edu › ta-ra-salaries ↗</div>
-              </a>
-              <a href="https://www.washington.edu/opb/tuition-fees/current-tuition-and-fees-dashboards/graduate-tuition-dashboard/"
-                target="_blank" rel="noopener noreferrer"
-                className="block bg-white border border-bdLt rounded px-2.5 py-2 hover:border-sage-500 transition">
-                <div className="text-[11px] font-semibold text-ink">UW OPB · Graduate Tuition Dashboard</div>
-                <div className="text-[10px] text-mute mt-0.5 truncate">washington.edu › opb › graduate-tuition-dashboard ↗</div>
-              </a>
-              <p className="text-[10px] text-mute leading-relaxed">Last fetched 12 min ago. AI fills derived values from these sources and flags rate changes.</p>
-            </div>
-          </>
-        )}
-
-        {row.category === 'personnel' && !row.id.startsWith('ra') && (
-          <>
-            <h3 className="text-[14px] font-semibold">{row.label || 'PI'} — {row.cellRef}</h3>
-
-            {/* Workday integration card */}
-            <div className="border border-[#0875E1]/30 bg-[#0875E1]/5 rounded-md p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-semibold" style={{ color: '#0875E1' }}>
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#0875E1' }} aria-hidden />
-                  Workday integration
-                </span>
-                <button onClick={() => toast('Salary refreshed from Workday HCM.')} className="text-[10px] underline" style={{ color: '#0875E1' }}>Refresh</button>
-              </div>
-              <div className="bg-white border border-bdLt rounded px-2.5 py-2 text-[11px] space-y-1">
-                <div className="flex justify-between"><span className="text-mute">Position</span><span className="text-ink font-medium">{row.role || 'Faculty'}</span></div>
-                <div className="flex justify-between"><span className="text-mute">Monthly salary</span><span className="text-ink font-semibold tabular-nums">{row.monthlySalary ? `$${row.monthlySalary.toLocaleString()}` : '—'}</span></div>
-                <div className="flex justify-between"><span className="text-mute">Pay group</span><span className="text-ink">12-month faculty</span></div>
-                <div className="flex justify-between"><span className="text-mute">Effective date</span><span className="text-ink">3/1/2024</span></div>
-              </div>
-              <p className="text-[10px] text-mute leading-relaxed">Last synced 8 min ago from Workday HCM. Salary auto-updates if Workday changes; the Workspace will surface a banner.</p>
-            </div>
-
-            <Stat k="Effort × Months" v={`${row.effortPct || 0}% × ${row.months || 0} mo`} />
-            <Stat k="Subtotal (computed)" v={`$${sub.toLocaleString()}`} confidence="high" source="Live formula" />
-
-            <div className="bg-purple-100/40 border border-purple-700/30 rounded-md p-3 text-[11px] text-purple-700 leading-relaxed">
-              <b>✦ NIH Executive Level II salary cap</b> — current cap $221,900/yr ($18,492/mo). If salary exceeds the cap, only the cap is chargeable.
-            </div>
-          </>
-        )}
+        {/* Personnel rows handled by PersonnelPanel — see WorkspaceScreen router. */}
 
         {row.category === 'fa' && (
           <>
@@ -790,6 +916,199 @@ function Stat({ k, v, sub, confidence, source }: { k: string; v: string; sub?: s
       </div>
       {sub && <div className="text-[11px] text-sub">{sub}</div>}
       {source && <SourceTag source={source} />}
+    </div>
+  )
+}
+
+// =====================================================================
+// PersonnelPanel — new right-panel design (matches the user's reference)
+// =====================================================================
+
+function PersonnelPanel({ row, allRows, period, onUpdate, onVerify, onClose }: {
+  row: WorkspaceRow; allRows: WorkspaceRow[]; period: number;
+  onUpdate: (id: string, patch: Partial<WorkspaceRow>) => void;
+  onVerify: (id: string) => void;
+  onClose: () => void;
+}) {
+  const sub = computeSubtotal(row, allRows)
+  const cfg = roleConfigFor(row.roleType)
+  const [cascade, setCascade] = useState(true)
+
+  // No role picked yet — show prompt
+  if (!row.roleType || !cfg) {
+    return (
+      <aside className="w-[420px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0 animate-[slideInRight_220ms_ease-out]">
+        <PanelHeader period={period} subtotal={sub} onClose={onClose} />
+        <div className="flex-1 flex flex-col items-center justify-center px-8 py-10 text-center">
+          <div className="text-[36px] mb-3 text-purple-700">✦</div>
+          <div className="text-[14px] font-semibold mb-2">Pick a role to begin</div>
+          <p className="text-[12px] text-mute leading-relaxed">
+            In the worksheet row, select <b>PI</b>, <b>Grad-PhD</b>, <b>Grad-Master</b>, or <b>Bachelor</b> from the Role dropdown.
+            UW source data will auto-populate here.
+          </p>
+        </div>
+      </aside>
+    )
+  }
+
+  const monthly = row.monthlySalary ?? cfg.monthlySalary
+  const adjusted = Math.round(monthly * (1 + (row.inflationRate || 0) / 100))
+  const monthsForFte = Number(cfg.fteLabel.replace(/[^0-9]/g, '')) || 0
+  const fteValue = row.effortPct !== undefined ? `${row.effortPct}%` : `${monthsForFte}%`
+
+  return (
+    <aside className="w-[420px] bg-white border-l border-bdLt flex flex-col overflow-hidden shrink-0 animate-[slideInRight_220ms_ease-out]">
+      <PanelHeader period={period} subtotal={sub} onClose={onClose} />
+
+      <div className="flex-1 overflow-auto px-5 py-5 space-y-4">
+        {/* Cascade toggle */}
+        <button onClick={() => setCascade(!cascade)} className="inline-flex items-center gap-2.5 text-[12px] text-purple-700">
+          <ToggleSwitch on={cascade} />
+          <span>Cascade to subsequent periods is <b>{cascade ? 'ON' : 'OFF'}</b></span>
+          <span className="text-sub" title="When ON, edits in this period apply to all later periods.">ⓘ</span>
+        </button>
+
+        {/* Keyboard hint */}
+        <div className="text-[11px] text-mute">
+          Hint: Press <kbd className="px-1.5 py-0.5 border border-bd rounded text-[10px] font-mono bg-surf2">CTRL</kbd>
+          <span className="mx-1">+</span>
+          <kbd className="px-1.5 py-0.5 border border-bd rounded text-[10px] font-mono bg-surf2">/</kbd>
+          {' '}to tab between the side panel and main content.
+        </div>
+
+        {/* Dropdown grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <DropField label="POSITION TYPE" value={cfg.posType} options={cfg.posTypes} />
+          <DropField label="SCHEDULE"      value={cfg.sched}   options={cfg.schedules} />
+          <DropField label="LEVEL"         value={cfg.level}   options={cfg.levels} />
+          <DropField label="BASE FTE"      value={fteValue}    options={cfg.ftes}
+            onChange={v => onUpdate(row.id, { effortPct: Number(v.replace(/[^0-9]/g, '')) || 0 })} />
+        </div>
+
+        {/* Auto-populated card */}
+        <div className="bg-purple-100/40 border-l-[3px] border-purple-700 rounded-md px-3.5 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-purple-700">
+              <span className="w-4 h-4 rounded-full bg-purple-700 text-white text-[9px] flex items-center justify-center">✓</span>
+              Auto-Populated from UW Sources
+            </span>
+            <a href={cfg.sourceUrl} target="_blank" rel="noopener noreferrer"
+              className="text-[11px] text-purple-700 underline inline-flex items-center gap-1">
+              Check website <span>↗</span>
+            </a>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[12px] pt-1">
+            <div>
+              <div className="text-[10px] text-mute">Monthly Salary</div>
+              <div className="font-semibold text-ink">${cfg.monthlySalary.toLocaleString()} <span className="text-[10px] text-mute font-normal">({cfg.source.split(' ')[0]}, eff. 3/1)</span></div>
+            </div>
+            <div>
+              <div className="text-[10px] text-mute">Annual (12 mo)</div>
+              <div className="font-semibold text-ink">${(cfg.monthlySalary * 12).toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-mute">Fringe Rate</div>
+              <div className="font-semibold text-ink">{cfg.fringeRate}% <span className="text-[10px] text-mute font-normal">(OMA, FY24)</span></div>
+            </div>
+            {cfg.tuitionAnnual > 0 && (
+              <div>
+                <div className="text-[10px] text-mute">Tuition</div>
+                <div className="font-semibold text-ink">${cfg.tuitionAnnual.toLocaleString()}/yr <span className="text-[10px] text-mute font-normal">(OPB)</span></div>
+              </div>
+            )}
+          </div>
+          <div className="border-t border-purple-700/15 pt-2 mt-1 text-[11px] text-purple-700 inline-flex items-center gap-1.5">
+            <span>ⓘ</span> Rates effective as of April 2024.
+          </div>
+        </div>
+
+        {/* Editable inputs */}
+        <Field2 label="MONTHLY BASE SALARY" prefix="$"
+          value={row.monthlySalary}
+          onChange={v => onUpdate(row.id, { monthlySalary: v })}
+          placeholder={cfg.monthlySalary.toString()} />
+
+        <Field2 label="INFLATION RATE" suffix="%"
+          value={row.inflationRate ?? 0}
+          onChange={v => onUpdate(row.id, { inflationRate: v })} />
+
+        <div>
+          <div className="text-[10px] text-sub uppercase tracking-widest font-semibold mb-1">Adjusted Monthly Base Salary</div>
+          <div className="text-[16px] font-semibold tabular-nums">${adjusted.toLocaleString()}</div>
+        </div>
+
+        {row.autoPopulated && !row.verified && (
+          <div className="bg-purple-100/40 border border-purple-700/30 rounded-md p-3 text-[11px] text-purple-700">
+            <b>✦ AI auto-populated</b> — these values were suggested from a verified {row.roleType === 'PI' ? 'Contact PI' : row.roleType === 'Grad-PhD' ? 'PhD candidate' : "Master's RA"}. Review and click <b>Approve</b> to lock them in.
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-bdLt px-5 py-3 flex items-center gap-3">
+        <button onClick={onClose}
+          className="flex-1 px-4 py-2.5 border border-bd rounded-lg text-[13px] font-medium hover:bg-surf2 transition">
+          Cancel
+        </button>
+        <button onClick={() => onVerify(row.id)}
+          className="flex-1 px-4 py-2.5 bg-purple-700 text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">
+          {row.autoPopulated && !row.verified ? 'Approve' : 'Save to Budget'}
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function PanelHeader({ period, subtotal, onClose }: { period: number; subtotal: number; onClose: () => void }) {
+  return (
+    <div className="bg-surf2 px-5 py-4 flex items-start justify-between border-b border-bdLt">
+      <div>
+        <div className="text-[20px] font-semibold leading-tight text-ink">Period {period}</div>
+        <div className="text-[16px] font-semibold tabular-nums text-ink mt-1">${subtotal.toLocaleString()}</div>
+      </div>
+      <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-sub hover:text-ink text-[18px]" aria-label="Close">✕</button>
+    </div>
+  )
+}
+
+function ToggleSwitch({ on }: { on: boolean }) {
+  return (
+    <span className={`inline-block w-9 h-5 rounded-full relative transition shrink-0 ${on ? 'bg-purple-700' : 'bg-bd'}`}>
+      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+    </span>
+  )
+}
+
+function DropField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange?: (v: string) => void }) {
+  return (
+    <div>
+      <div className="text-[10px] text-sub uppercase tracking-widest font-semibold mb-1">{label}</div>
+      <select value={options.includes(value) ? value : options[0]}
+        onChange={e => onChange?.(e.target.value)}
+        className="w-full px-2.5 py-2 border border-bd rounded-md text-[12px] focus:outline-none focus:border-sage-500 bg-white">
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  )
+}
+
+function Field2({ label, prefix, suffix, value, onChange, placeholder }: {
+  label: string; prefix?: string; suffix?: string;
+  value?: number; onChange: (v: number) => void; placeholder?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] text-sub uppercase tracking-widest font-semibold mb-1">{label}</div>
+      <div className="flex items-center border border-bd rounded-md px-2.5 py-2 focus-within:border-sage-500 bg-white">
+        {prefix && <span className="text-mute text-[12px] mr-1.5">{prefix}</span>}
+        <input
+          value={value !== undefined && value !== 0 ? value.toLocaleString() : ''}
+          onChange={e => onChange(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+          placeholder={placeholder}
+          className="flex-1 outline-none text-[13px] tabular-nums bg-transparent placeholder:text-sub placeholder:italic"
+        />
+        {suffix && <span className="text-mute text-[12px] ml-1.5">{suffix}</span>}
+      </div>
     </div>
   )
 }
@@ -1780,8 +2099,8 @@ function BudgetDetailView(props: Nav) {
   const [section, setSection] = useState<'summary'|'worksheet'>('summary')
 
   // Map workspace rows to SAGE Budget summary groups
-  const piRows = rows.filter(r => r.category === 'personnel' && !r.id.startsWith('ra'))
-  const raRows = rows.filter(r => r.category === 'personnel' && r.id.startsWith('ra'))
+  const piRows = rows.filter(r => r.category === 'personnel' && r.roleType === 'PI')
+  const raRows = rows.filter(r => r.category === 'personnel' && (r.roleType === 'Grad-PhD' || r.roleType === 'Grad-Master'))
   const fringeRow = rows.find(r => r.category === 'fringe')
   const piSalaryTotal = piRows.reduce((s, r) => s + computeSubtotal(r, rows), 0)
   const raSalaryTotal = raRows.reduce((s, r) => s + computeSubtotal(r, rows), 0)
