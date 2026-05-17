@@ -1,4 +1,4 @@
-import { useState, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 // =====================================================================
 // SHARED ATOMS — these mirror the Figma Components page
@@ -121,8 +121,27 @@ export function StaleValue({ children, reason }: { children: ReactNode; reason: 
   )
 }
 
-// PURPLE MEMO: Feedback toast — sits above the green footer band
+// PURPLE MEMO: Feedback toast — eGC1 submissions get a short modal-style overlay.
 export function FeedbackToast({ show, message }: { show: boolean; message: string }) {
+  const isEgc1Submission = message.toLowerCase().includes('egc1') && message.toLowerCase().includes('submitted')
+
+  if (isEgc1Submission) {
+    return (
+      <div
+        className={`fixed inset-0 z-[80] flex items-center justify-center bg-ink/25 backdrop-blur-[1px] transition-all duration-300 ${show ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className={`bg-card text-ink border border-sage-100 rounded-2xl shadow-2xl px-8 py-7 min-w-[340px] max-w-[460px] text-center transition-all duration-300 ${show ? 'scale-100 translate-y-0' : 'scale-95 translate-y-3'}`}>
+          <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-sage-100 text-sage-700 flex items-center justify-center text-[24px] font-bold" aria-hidden>✓</div>
+          <div className="text-[17px] font-semibold text-sage-800 mb-1">eGC1 submitted</div>
+          <div className="text-[13px] text-mute leading-relaxed">{message}</div>
+          <div className="mt-4 text-[11px] text-sub">This notification will close automatically.</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`fixed bottom-16 right-6 z-[60] transition-all duration-300 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
@@ -131,6 +150,112 @@ export function FeedbackToast({ show, message }: { show: boolean; message: strin
       <div className="bg-sage-700 text-white px-5 py-4 rounded-xl shadow-2xl flex items-center gap-3 min-w-[320px] max-w-[420px]">
         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-lg" aria-hidden>✓</div>
         <div className="text-[13px] font-medium leading-snug">{message}</div>
+      </div>
+    </div>
+  )
+}
+
+export type TutorialStep = {
+  title: string;
+  eyebrow: string;
+  body: string;
+  target: string;
+}
+
+export function TutorialOverlay({
+  show, step, index, total, onNext, onBack, onClose,
+}: {
+  show: boolean;
+  step: TutorialStep;
+  index: number;
+  total: number;
+  onNext: () => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
+
+  useEffect(() => {
+    if (!show) return
+
+    function updateTargetRect(scrollToTarget = false) {
+      const target = document.querySelector(`[data-tutorial-target="${step.target}"]`)
+      if (!target) return setTargetRect(null)
+      if (scrollToTarget) target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      window.setTimeout(() => {
+        const nextTarget = document.querySelector(`[data-tutorial-target="${step.target}"]`)
+        setTargetRect(nextTarget?.getBoundingClientRect() ?? null)
+      }, 180)
+    }
+
+    const handleLayoutChange = () => updateTargetRect(false)
+    updateTargetRect(true)
+    window.addEventListener('resize', handleLayoutChange)
+    window.addEventListener('scroll', handleLayoutChange, true)
+    return () => {
+      window.removeEventListener('resize', handleLayoutChange)
+      window.removeEventListener('scroll', handleLayoutChange, true)
+    }
+  }, [show, step.target])
+
+  if (!show) return null
+  const width = 278
+  const gap = 12
+  const estimatedBubbleHeight = 205
+  const toolbarLift = 82
+  const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth
+  const viewportHeight = typeof window === 'undefined' ? 768 : window.innerHeight
+  const fallbackTop = 96
+  const fallbackLeft = Math.max(16, viewportWidth - width - 16)
+  const targetCenterX = targetRect ? targetRect.left + targetRect.width / 2 : fallbackLeft + width / 2
+  const isBottomTarget = !!targetRect && targetRect.top > viewportHeight * 0.65
+  const placeAbove = !!targetRect && (isBottomTarget || (targetRect.bottom + 190 > viewportHeight && targetRect.top > 190))
+  const bubbleLeft = targetRect
+    ? Math.min(Math.max(16, targetCenterX - width / 2), viewportWidth - width - 16)
+    : fallbackLeft
+  const bubbleTop = targetRect
+    ? placeAbove
+      ? Math.max(16, targetRect.top - estimatedBubbleHeight - gap - (isBottomTarget ? toolbarLift : 0))
+      : Math.min(targetRect.bottom + gap, viewportHeight - estimatedBubbleHeight - 16)
+    : fallbackTop
+  const arrowLeft = targetRect ? Math.min(Math.max(18, targetCenterX - bubbleLeft - 6), width - 24) : width - 42
+
+  return (
+    <div className="fixed inset-0 z-[70] pointer-events-none" aria-live="polite">
+      <div
+        className="absolute w-[278px] max-w-[calc(100vw-24px)] bg-card/75 backdrop-blur-md border border-sage-100/80 rounded-xl shadow-lg pointer-events-auto overflow-visible"
+        style={{ left: bubbleLeft, top: bubbleTop }}
+      >
+        <span
+          className={`absolute left-4 h-3 w-3 rotate-45 bg-sage-700/85 border-sage-700/85 ${placeAbove ? '-bottom-1.5' : '-top-1.5'}`}
+          style={{ left: arrowLeft }}
+          aria-hidden
+        />
+        <div className="relative bg-sage-700/85 text-white px-4 py-2.5 flex items-center gap-2.5 rounded-t-xl">
+          <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-[13px] font-bold">?</div>
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-sage-100">{step.eyebrow}</div>
+            <div className="text-[12px] font-semibold">Tutorial mode</div>
+          </div>
+          <button onClick={onClose} className="ml-auto text-white/80 hover:text-white text-[16px] leading-none" aria-label="Hide tutorial bubble">×</button>
+        </div>
+        <div className="px-4 py-4">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h2 className="text-[14px] font-semibold text-ink leading-snug">{step.title}</h2>
+            <span className="text-[10px] text-sub shrink-0 pt-0.5">{index + 1} / {total}</span>
+          </div>
+          <p className="text-[12px] text-mute leading-relaxed">{step.body}</p>
+          <div className="mt-3 flex items-center gap-2">
+            <button onClick={onBack} disabled={index === 0}
+              className="px-2.5 py-1.5 text-[11px] rounded-md border border-bd text-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-surf2 transition">
+              Back
+            </button>
+            <button onClick={onNext}
+              className="ml-auto px-2.5 py-1.5 text-[11px] rounded-md bg-sage-50 text-sage-700 font-semibold hover:bg-sage-100 transition">
+              {index === total - 1 ? 'Finish' : 'Next'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -405,21 +530,39 @@ export const TABS: { key: TabKey; label: string; isNew?: boolean; isTutorial?: b
   { key: 'advances',  label: 'Advances' },
   { key: 'awards',    label: 'Awards' },
   { key: 'subawards', label: 'Subawards' },
-  { key: 'workspace', label: 'Workspace', isNew: true },
+  { key: 'workspace', label: 'Worksheet', isNew: true },
   { key: 'files',     label: 'Files',     isNew: true },
   { key: 'guide',     label: 'Guide',     isTutorial: true },
 ]
 
-export function TopNav({ active, onJump, userName = 'Hermione Granger' }: {
+export function TopNav({ active, onJump, userName = 'Hermione Granger', tutorialMode = false, onTutorialModeChange }: {
   active: TabKey;
   onJump: (k: TabKey) => void;
   userName?: string;
+  tutorialMode?: boolean;
+  onTutorialModeChange?: (on: boolean) => void;
 }) {
   return (
     <header className="bg-sage-700 text-white shrink-0">
       <div className="flex items-center px-6 py-2 border-b border-sage-900/30 gap-3">
         <div className="text-[18px] font-bold tracking-wide">SAGE</div>
         <div className="flex-1" />
+        {onTutorialModeChange && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={tutorialMode}
+            onClick={() => onTutorialModeChange(!tutorialMode)}
+            className={`h-7 rounded-full border px-2 py-1 inline-flex items-center gap-2 text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+              tutorialMode ? 'bg-white text-sage-800 border-white' : 'bg-sage-900/25 text-white/85 border-white/25 hover:bg-sage-900/40'
+            }`}
+          >
+            <span className={`relative h-4 w-8 rounded-full transition-colors ${tutorialMode ? 'bg-sage-600' : 'bg-white/30'}`} aria-hidden>
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${tutorialMode ? 'left-[18px]' : 'left-0.5'}`} />
+            </span>
+            Tutorial {tutorialMode ? 'on' : 'off'}
+          </button>
+        )}
         <div className="flex items-center gap-2 text-[12px]">
           <span>{userName}</span>
           <div className="w-7 h-7 rounded-full bg-sage-600 flex items-center justify-center text-[11px] font-bold">
@@ -589,8 +732,8 @@ function FloatingTip({ children, label }: { children: ReactNode; label: string }
 }
 
 // Floating bar button — accepts ReactNode icon for composite glyphs (👤+, ✈, etc.)
-export function FloatingBtn({ icon, label, tooltip, onClick, primary, active }: {
-  icon: ReactNode; label?: string; tooltip: string; onClick?: () => void; primary?: boolean; active?: boolean;
+export function FloatingBtn({ icon, label, tooltip, onClick, primary, active, tutorialTarget }: {
+  icon: ReactNode; label?: string; tooltip: string; onClick?: () => void; primary?: boolean; active?: boolean; tutorialTarget?: string;
 }) {
   const cls = primary
     ? 'bg-sage-600 border-sage-700 text-white hover:bg-sage-700'
@@ -598,13 +741,52 @@ export function FloatingBtn({ icon, label, tooltip, onClick, primary, active }: 
     ? 'bg-amber-50 border-amber-bd text-amber-700'
     : 'bg-white border-bd text-ink hover:bg-surf2'
   const btn = (
-    <button onClick={onClick} aria-label={tooltip}
+    <button onClick={onClick} aria-label={tooltip} data-tutorial-target={tutorialTarget}
       className={`shrink-0 ${label ? 'px-3.5' : 'w-9 justify-center'} h-9 rounded-full border text-[12px] font-medium inline-flex items-center gap-1.5 leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 ${cls}`}>
       <span aria-hidden className="leading-none flex items-center">{icon}</span>
       {label && <span className="whitespace-nowrap">{label}</span>}
     </button>
   )
   return <FloatingTip label={tooltip}>{btn}</FloatingTip>
+}
+
+/** AI Assist — compact switch: OFF/ON labels inside the track, “AI Assist” beside it */
+export function FloatingAiAssistSwitch({ on, onToggle, tutorialTarget }: { on: boolean; onToggle: () => void; tutorialTarget?: string }) {
+  return (
+    <FloatingTip label={on ? 'AI Assist is on — click to turn off' : 'AI Assist is off — click to turn on'}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={onToggle}
+        data-tutorial-target={tutorialTarget}
+        className={`shrink-0 inline-flex items-center gap-1.5 pl-1.5 pr-2.5 h-9 rounded-full border text-[12px] font-medium leading-none transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 ${
+          on ? 'bg-sage-50 border-sage-600 text-sage-800' : 'bg-white border-bd text-ink hover:bg-surf2'
+        }`}
+      >
+        <span
+          className={`relative h-[18px] w-[42px] shrink-0 rounded-full overflow-hidden shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] transition-colors ${on ? 'bg-sage-600' : 'bg-[#B4B8B1]'}`}
+          aria-hidden
+        >
+          <span className="absolute inset-0 flex items-stretch text-[7px] font-extrabold uppercase tracking-tight leading-none select-none pointer-events-none">
+            <span className={`flex-1 flex items-center justify-center ${on ? 'text-white/45' : 'text-neutral-900/75'}`}>
+              Off
+            </span>
+            <span className={`flex-1 flex items-center justify-center ${on ? 'text-white' : 'text-neutral-900/35'}`}>
+              On
+            </span>
+          </span>
+          <span
+            className={`absolute top-px h-[14px] w-[14px] rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-[left] duration-200 ease-out ${on ? 'left-[26px]' : 'left-px'}`}
+          />
+        </span>
+        <span className="whitespace-nowrap inline-flex items-center gap-0.5 text-[11px] font-semibold">
+          <span className="text-sage-600 leading-none" aria-hidden>✦</span>
+          AI Assist
+        </span>
+      </button>
+    </FloatingTip>
+  )
 }
 
 // Modal primitive — for the Upload Documents flow
@@ -639,17 +821,31 @@ export function StickyCta({ children, hint }: { children: ReactNode; hint?: stri
   )
 }
 
-export function Footer({ summary }: { summary?: string }) {
+export function Footer({ summary }: { summary?: ReactNode }) {
   return (
     <footer className="bg-sage-700 text-[#E8F0EB] text-[12px] px-7 py-3.5 flex items-center justify-between">
       <span>University of Washington</span>
-      <span>{summary || 'About SAGE  ·  Learning  ·  Contact Us'}</span>
+      <span>{summary ?? 'About SAGE  ·  Learning  ·  Contact Us'}</span>
       <span>Release Date: March 2, 2026</span>
     </footer>
   )
 }
 
-export function Header({ title, idChip, status, totals, leading }: { title: ReactNode; idChip: string; status?: string; totals?: { label: string; value: string }[]; leading?: ReactNode }) {
+function headerTotalValueClass(value: string, balance: 'match' | 'mismatch' | 'neutral', totalColumn: boolean): string {
+  const base = 'text-[13px] font-semibold '
+  if (value === '—') return base + 'text-sub'
+  if (totalColumn) return base + 'text-emerald-600'
+  if (balance === 'neutral') return base + 'text-ink'
+  if (balance === 'match') return base + 'text-emerald-600'
+  return base + 'text-red'
+}
+
+export function Header({ title, idChip, status, totals, totalsBalance = 'neutral', leading }: {
+  title: ReactNode; idChip: string; status?: string;
+  totals?: { label: string; value: string }[];
+  totalsBalance?: 'match' | 'mismatch' | 'neutral';
+  leading?: ReactNode;
+}) {
   return (
     <header className="bg-white border-b border-bdLt px-7 py-4 flex items-center gap-4">
       {leading}
@@ -667,7 +863,7 @@ export function Header({ title, idChip, status, totals, leading }: { title: Reac
         ]).map(t => (
           <div key={t.label} className="flex flex-col">
             <span className="text-[9px] text-sub uppercase tracking-widest font-semibold">{t.label}</span>
-            <span className="text-[13px] font-semibold">{t.value}</span>
+            <span className={headerTotalValueClass(t.value, totalsBalance, t.label === 'Total')}>{t.value}</span>
           </div>
         ))}
       </div>

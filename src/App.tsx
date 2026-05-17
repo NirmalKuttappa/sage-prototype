@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { TopNav, FeedbackToast, type TabKey, type AwardsStep } from './ui'
+import { useEffect, useState } from 'react'
+import { TopNav, FeedbackToast, TutorialOverlay, type TutorialStep, type TabKey, type AwardsStep } from './ui'
 import {
   WorkspaceScreen,
   EGC1FormsScreen,
@@ -13,12 +13,103 @@ import {
   BLANK_ROWS,
 } from './screens'
 
+type GuidedStep = TutorialStep & {
+  tab: TabKey;
+  awardsStep?: AwardsStep;
+}
+
+const TUTORIAL_STEPS: GuidedStep[] = [
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 1 · Worksheet',
+    title: 'Start in Worksheet',
+    body: 'This is the main budget surface. Enter the proposed total, fill rows, and watch totals update in the header, worksheet footer, and reconciliation bar.',
+    target: 'workspace',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 2 · Suggested total',
+    title: 'Use AI to suggest a total',
+    body: 'Click AI suggest next to Proposed total. SAGE estimates a starting target from similar past proposals so the budget has something to balance against.',
+    target: 'proposed-total-suggest',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 3 · Department',
+    title: 'Select the department rate table',
+    body: 'Use the Department dropdown in the setup row. This ties the workspace to the matching UW variable RA salary schedule group for the budget.',
+    target: 'department-select',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 4 · Name',
+    title: 'Type the person or item name',
+    body: 'Start by typing into the first personnel Name field. With AI Assist on, SAGE can suggest likely people or budget items based on similar proposals.',
+    target: 'name-input',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 5 · Role',
+    title: 'Select roles in the worksheet',
+    body: 'For personnel rows, use the Role dropdown to choose PI, Grad-PhD, Grad-Master, or Bachelor. The right panel opens with UW source data for that role.',
+    target: 'role-select',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 6 · Period update',
+    title: 'Confirm role period details',
+    body: 'Review the side panel and save the role period details. This is where AI helps in the backend by initially populating UW source data, schedule, level, base FTE, salary, and related period fields for review.',
+    target: 'role-period-update',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 7 · Upload',
+    title: 'Upload source documents',
+    body: 'Click Upload in the floating toolbar to attach PDFs or other source files. SAGE can OCR and suggest which worksheet row the document supports.',
+    target: 'upload-button',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 8 · Attachments',
+    title: 'Show or hide the PDF preview',
+    body: 'Use the paperclip button to open or hide the attachment/PDF preview. Linked documents can stay visible while you review or reconcile rows.',
+    target: 'attachment-button',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 9 · Validate',
+    title: 'Validate budget mismatches',
+    body: 'Click Validate to scan the workspace for budget issues. Mismatch panels explain what is wrong and offer fixes when totals do not match.',
+    target: 'validate-button',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 10 · PI Review',
+    title: 'Send the budget to PI review',
+    body: 'Use PI Review to send the current budget to the PI. The review panel tracks comments, replies, and simulated decisions in the prototype.',
+    target: 'pi-review-button',
+  },
+  {
+    tab: 'workspace',
+    eyebrow: 'Step 11 · Copy to eGC1',
+    title: 'Copy the workspace into eGC1',
+    body: 'When the workspace is ready, click Copy to eGC1. This moves the budget into the eGC1 form flow so it can be submitted.',
+    target: 'copy-egc1-button',
+  },
+]
+
 export default function App() {
   const [tab, setTab] = useState<TabKey>('workspace')
   const [awardsStep, setAwardsStep] = useState<AwardsStep>('noa')
   const [toastMsg, setToastMsg] = useState('')
   const [toastOn, setToastOn] = useState(false)
-  const [aiOn, setAiOn] = useState(false)
+  const [aiOn, setAiOn] = useState(true)
+  const [tutorialMode, setTutorialMode] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage.getItem('sage-tutorial-seen') !== 'true'
+  })
+  const [tutorialIndex, setTutorialIndex] = useState(0)
+  const [tutorialBubbleHidden, setTutorialBubbleHidden] = useState(false)
 
   // Cross-tab shared state
   const [issues, setIssues] = useState<Issue[]>([]) // empty until reconciliation activates
@@ -39,11 +130,73 @@ export default function App() {
     setTab('awards')
     window.scrollTo(0, 0)
   }
+  function setTutorial(on: boolean) {
+    setTutorialMode(on)
+    setTutorialBubbleHidden(false)
+    if (on) {
+      const currentIndex = TUTORIAL_STEPS.findIndex(s => s.tab === tab && (!s.awardsStep || s.awardsStep === awardsStep))
+      setTutorialIndex(currentIndex >= 0 ? currentIndex : 0)
+    } else if (typeof window !== 'undefined') {
+      window.localStorage.setItem('sage-tutorial-seen', 'true')
+    }
+  }
+  function goTutorialStep(index: number) {
+    const nextIndex = Math.max(0, Math.min(index, TUTORIAL_STEPS.length - 1))
+    const step = TUTORIAL_STEPS[nextIndex]
+    setTutorialIndex(nextIndex)
+    setTutorialBubbleHidden(false)
+    if (step.awardsStep) goAwards(step.awardsStep)
+    else go(step.tab)
+  }
+  function nextTutorialStep() {
+    if (tutorialIndex === TUTORIAL_STEPS.length - 1) {
+      setTutorial(false)
+      return
+    }
+    goTutorialStep(tutorialIndex + 1)
+  }
   function toast(message: string) {
     setToastMsg(message)
     setToastOn(true)
     setTimeout(() => setToastOn(false), 3200)
   }
+
+  useEffect(() => {
+    if (!tutorialMode) return
+    const currentStep = TUTORIAL_STEPS[tutorialIndex]
+    const currentStepMatches = currentStep.tab === tab && (!currentStep.awardsStep || currentStep.awardsStep === awardsStep)
+    if (currentStepMatches) return
+
+    const nextTabMatch = TUTORIAL_STEPS.findIndex(s => s.tab === tab && (!s.awardsStep || s.awardsStep === awardsStep))
+    if (nextTabMatch >= 0 && nextTabMatch !== tutorialIndex) setTutorialIndex(nextTabMatch)
+  }, [awardsStep, tab, tutorialIndex, tutorialMode])
+
+  useEffect(() => {
+    if (!tutorialMode) return
+    const currentStep = TUTORIAL_STEPS[tutorialIndex]
+    const selector = `[data-tutorial-target="${currentStep.target}"]`
+
+    function advanceFromTarget(event: Event) {
+      if ((currentStep.target === 'department-select' || currentStep.target === 'role-select') && event.type !== 'change') return
+      if (currentStep.target === 'name-input' && event.type !== 'input' && event.type !== 'pointerdown' && event.type !== 'mousedown') return
+      const target = event.target as Element | null
+      if (!target?.closest(selector)) return
+      window.setTimeout(nextTutorialStep, 180)
+    }
+
+    document.addEventListener('click', advanceFromTarget, true)
+    document.addEventListener('pointerdown', advanceFromTarget, true)
+    document.addEventListener('mousedown', advanceFromTarget, true)
+    document.addEventListener('change', advanceFromTarget, true)
+    document.addEventListener('input', advanceFromTarget, true)
+    return () => {
+      document.removeEventListener('click', advanceFromTarget, true)
+      document.removeEventListener('pointerdown', advanceFromTarget, true)
+      document.removeEventListener('mousedown', advanceFromTarget, true)
+      document.removeEventListener('change', advanceFromTarget, true)
+      document.removeEventListener('input', advanceFromTarget, true)
+    }
+  }, [tutorialIndex, tutorialMode])
 
   const props = {
     go, goAwards, toast,
@@ -61,7 +214,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <TopNav active={tab} onJump={go} />
+      <TopNav active={tab} onJump={go} tutorialMode={tutorialMode} onTutorialModeChange={setTutorial} />
       <main className="flex-1 overflow-hidden flex">
         {tab === 'workspace' && <WorkspaceScreen {...props} />}
         {tab === 'egc1'      && <EGC1FormsScreen {...props} />}
@@ -73,6 +226,15 @@ export default function App() {
         {tab === 'advances'  && <PlaceholderScreen name="Advances"  {...props} />}
         {tab === 'subawards' && <PlaceholderScreen name="Subawards" {...props} />}
       </main>
+      <TutorialOverlay
+        show={tutorialMode && !tutorialBubbleHidden}
+        step={TUTORIAL_STEPS[tutorialIndex]}
+        index={tutorialIndex}
+        total={TUTORIAL_STEPS.length}
+        onNext={nextTutorialStep}
+        onBack={() => goTutorialStep(tutorialIndex - 1)}
+        onClose={() => setTutorialBubbleHidden(true)}
+      />
       <FeedbackToast show={toastOn} message={toastMsg} />
     </div>
   )

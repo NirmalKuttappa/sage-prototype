@@ -54,7 +54,7 @@ src/
 
 ```bash
 npm install
-npm run dev          # starts Vite at http://localhost:5180/
+npm run dev          # starts Vite at http://localhost:5190/ (see vite.config.ts if the port shifts)
 npm run build        # production build into dist/
 ```
 
